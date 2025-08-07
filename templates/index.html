@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Superset Query Runner</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; cursor: default; }
+        th.sortable { cursor: pointer; }
+        th.sortable::after { content: " ⬍"; font-size: 0.8em; color: #888; }
+        th.sorted-asc::after { content: " ▲"; color: #000; }
+        th.sorted-desc::after { content: " ▼"; color: #000; }
+        .filter-input { 
+            width: 90%; 
+            padding: 4px; 
+            font-size: 12px; 
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        .filter-input[title*="comma"] {
+            border-color: #17a2b8;
+            background-color: #f8f9fa;
+        }
+        .multi-filter-info {
+            font-size: 11px;
+            color: #666;
+            font-style: italic;
+            margin-top: 5px;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+        }
+        .nav-links a {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .nav-links a:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h2>Superset Query Runner</h2>
+    
+        <div class="nav-links">
+            <a href="/">Query Table</a>
+            <a href="/dod-graphs">DoD Graphs</a>
+            <a href="/breakout-analysis">Breakout Analysis</a>
+            <a href="/aggregate-view">Aggregate View</a>
+        </div>    <form id="queryForm">
+        <div style="display: flex; gap: 15px; align-items: end; flex-wrap: wrap; margin-bottom: 10px;">
+            <div>
+                <label for="deal_name">Deal Name Filters (comma-separated):</label>
+                <input type="text" id="deal_name" name="deal_name" placeholder="e.g. Banijay, PSI, US" style="width: 300px;">
+                <small style="display: block; color: #666;">Use commas to separate multiple filters (AND logic)</small>
+            </div>
+            <div>
+                <label for="date_from">Date From:</label>
+                <input type="date" id="date_from" name="date_from" value="2025-07-01">
+            </div>
+            <div>
+                <label for="date_to">Date To:</label>
+                <input type="date" id="date_to" name="date_to" value="2025-08-03">
+            </div>
+            <div>
+                <button type="submit">Run Query</button>
+                <button type="button" id="debugBtn" style="margin-left: 10px; background: #ffc107; color: black;">Debug Deal ID</button>
+            </div>
+        </div>
+    </form>
+
+    <div id="status" style="margin-top: 20px; font-weight: bold;"></div>
+
+    <div id="exportControls" style="margin: 20px 0; display: none;">
+        <button id="exportCsv" style="margin-right: 10px; padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Export to CSV</button>
+        <button id="exportJson" style="padding: 8px 16px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer;">Export to JSON</button>
+    </div>
+
+    <table id="resultsTable" style="display:none;">
+        <thead>
+            <tr id="tableHead"></tr>
+            <tr id="filterRow"></tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+
+    <div id="filterHelp" style="display:none; margin-top: 10px; font-size: 12px; color: #666;">
+        💡 <strong>Tip:</strong> Use commas in the Deal Name filter to require ALL terms to be present (e.g., "US, Entertainment" finds deals containing both words)
+    </div>
+
+    <script>
+        let jobId = null;
+        let allRows = [];
+        let allColumns = [];
+        let filterValues = {};  // Persist filters between renders
+        let sortConfig = { column: null, direction: null }; // Sorting state
+
+        document.getElementById("queryForm").addEventListener("submit", function(e) {
+            e.preventDefault();
+            
+            // Get form values
+            const dealNamesInput = document.getElementById("deal_name").value.trim();
+            const dateFrom = document.getElementById("date_from").value;
+            const dateTo = document.getElementById("date_to").value;
+            
+            // Process deal names (split by comma if multiple)
+            const dealNames = dealNamesInput ? dealNamesInput.split(',').map(name => name.trim()).filter(name => name) : [];
+            
+            if (dealNames.length === 0) {
+                alert("Please enter at least one deal name!");
+                return;
+            }
+            
+            // Validate date range
+            if (dateFrom && dateTo && new Date(dateFrom) > new Date(dateTo)) {
+                alert('Start date cannot be after end date');
+                return;
+            }
+            
+            submitQuery(dealNames, dateFrom, dateTo);
+        });
+
+        // Debug button functionality
+        document.getElementById("debugBtn").addEventListener("click", function() {
+            const dealName = document.getElementById("deal_name").value.split(',')[0].trim();
+            if (!dealName) {
+                alert("Enter a deal name first");
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append("deal_name", dealName);
+            
+            document.getElementById("status").innerText = "Running debug query...";
+            
+            fetch("/debug_query", { method: "POST", body: formData })
+                .then(resp => resp.json())
+                .then(data => {
+                    if (data.status === "success") {
+                        console.log("Debug SQL:", data.sql);
+                        console.log("Debug Results:", data.data);
+                        
+                        // Display results in a popup or console
+                        const debugInfo = data.data.slice(0, 5).map(row => 
+                            `Deal ID: ${row.deal_id} (${row.deal_id_type})\nName: ${row.deal_name}\nHistory ID: ${row.history_id} (${row.history_id_type})\nString: ${row.deal_id_as_string}\n---`
+                        ).join('\n');
+                        
+                        alert(`Debug Results (first 5 rows):\n\n${debugInfo}\n\nSee console for full data`);
+                        document.getElementById("status").innerText = `Debug complete. Found ${data.data.length} rows.`;
+                    } else {
+                        alert("Debug failed: " + data.message);
+                        document.getElementById("status").innerText = "Debug failed.";
+                    }
+                });
+        });
+
+        function submitQuery(dealNames, dateFrom, dateTo) {
+            document.getElementById("status").innerText = "Submitting query...";
+            document.getElementById("resultsTable").style.display = "none";
+            document.getElementById("exportControls").style.display = "none";
+            document.getElementById("filterHelp").style.display = "none";
+
+            const formData = new FormData();
+            // Handle multiple deal names
+            dealNames.forEach(name => formData.append("deal_name", name));
+            if (dateFrom) formData.append("date_from", dateFrom);
+            if (dateTo) formData.append("date_to", dateTo);
+
+            fetch("/run_query", { method: "POST", body: formData })
+                .then(resp => resp.json())
+                .then(data => {
+                    jobId = data.job_id;
+                    document.getElementById("status").innerText = data.cached ? 
+                        "Loaded from cache. Fetching results..." : "Query running...";
+                    pollStatus();
+                });
+        }
+
+        function pollStatus() {
+            if (!jobId) return;
+
+            fetch(`/check_status/${jobId}`)
+                .then(resp => resp.json())
+                .then(data => {
+                    if (data.status === "running") {
+                        document.getElementById("status").innerText = `Query running... ${data.progress || 0}%`;
+                        setTimeout(pollStatus, 2000);
+                    } else if (data.status === "success") {
+                        allRows = data.rows.map(row => normalizeRow(row));
+                        allColumns = data.columns;  // preserve original order
+                        document.getElementById("status").innerText = `Query complete. ${allRows.length} rows.`;
+                        renderHeader(allColumns);
+                        renderBody(getFilteredAndSortedRows());
+                        document.getElementById("resultsTable").style.display = "table";
+                        document.getElementById("exportControls").style.display = "block";
+                        document.getElementById("filterHelp").style.display = "block";
+                    } else {
+                        document.getElementById("status").innerText = "Query failed: " + data.message;
+                    }
+                });
+        }
+
+        function normalizeRow(row) {
+            const normalized = {};
+            for (const key in row) {
+                normalized[key] = (row[key] === null || row[key] === undefined) ? "" : row[key];
+            }
+            return normalized;
+        }
+
+        function renderHeader(columns) {
+            const tableHead = document.getElementById("tableHead");
+            const filterRow = document.getElementById("filterRow");
+
+            tableHead.innerHTML = "";
+            filterRow.innerHTML = "";
+
+            columns.forEach(col => {
+                const th = document.createElement("th");
+                th.innerText = col;
+                th.classList.add("sortable");
+
+                th.addEventListener("click", () => toggleSort(col, th));
+                tableHead.appendChild(th);
+
+                // Filter input
+                const filterTh = document.createElement("th");
+                const input = document.createElement("input");
+                input.type = "text";
+                input.className = "filter-input";
+                input.dataset.column = col;
+                input.value = filterValues[col] || "";
+                
+                // Special handling for deal_name column
+                if (col.toLowerCase().includes('deal_name') || col.toLowerCase().includes('dealname')) {
+                    input.placeholder = "Filter (comma-separated, ALL must match)";
+                    input.title = "Enter multiple values separated by commas - ALL terms must be present (e.g., US, Entertainment)";
+                } else {
+                    input.placeholder = "Filter...";
+                }
+                
+                input.addEventListener("input", (e) => {
+                    filterValues[col] = e.target.value.toLowerCase();
+                    renderBody(getFilteredAndSortedRows());
+                });
+                filterTh.appendChild(input);
+                filterRow.appendChild(filterTh);
+            });
+        }
+
+        function renderBody(rows) {
+            const tableBody = document.getElementById("tableBody");
+            tableBody.innerHTML = "";
+
+            rows.forEach(row => {
+                const tr = document.createElement("tr");
+                allColumns.forEach(col => {
+                    const td = document.createElement("td");
+                    const rawValue = row[col] ?? "";
+                    td.innerText = formatCellValue(rawValue, col);
+                    tr.appendChild(td);
+                });
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function formatCellValue(value, columnName) {
+            if (value === "" || value === null || value === undefined) {
+                return "";
+            }
+
+            const colLower = columnName.toLowerCase();
+            
+            // Handle date columns - keep as date format
+            if (colLower.includes('date') || colLower === 'date_key') {
+                return value.toString();
+            }
+            
+            // Handle deal_id as string (don't format as number)
+            if (colLower.includes('deal_id')) {
+                return value.toString();
+            }
+            
+            // Handle deal_name as string (don't format as number)
+            if (colLower.includes('deal_name')) {
+                return value.toString();
+            }
+
+            const numValue = parseFloat(value);
+            
+            // Check if it's a valid number
+            if (isNaN(numValue)) {
+                return value.toString();
+            }
+
+            // Format percentage columns
+            if (colLower.includes('rate') || colLower.includes('percent')) {
+                return numValue.toLocaleString('en-US', {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 2
+                }) + '%';
+            }
+            
+            // Format integer columns with commas (no decimals)
+            if (colLower.includes('imps') || colLower.includes('oppos') || 
+                colLower.includes('bids') || colLower.includes('requests') || 
+                colLower.includes('candidates') || colLower.includes('totals') ||
+                colLower.includes('returned')) {
+                return Math.round(numValue).toLocaleString('en-US');
+            }
+            
+            // For other numeric values, use commas and up to 2 decimal places
+            if (Number.isInteger(numValue)) {
+                return numValue.toLocaleString('en-US');
+            } else {
+                return numValue.toLocaleString('en-US', {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: 2
+                });
+            }
+        }
+
+        function getFilteredAndSortedRows() {
+            // Filter
+            let filtered = allRows.filter(row =>
+                Object.entries(filterValues).every(([col, val]) => {
+                    if (!val) return true; // No filter value
+                    
+                    const cellValue = (row[col] ?? "").toString().toLowerCase();
+                    
+                    // Special handling for deal_name columns - support comma-separated multiple values
+                    if (col.toLowerCase().includes('deal_name') || col.toLowerCase().includes('dealname')) {
+                        // Split filter value by comma and check if ALL of the values match (AND logic)
+                        const filterTerms = val.split(',').map(term => term.trim()).filter(term => term);
+                        if (filterTerms.length === 0) return true;
+                        
+                        return filterTerms.every(term => cellValue.includes(term));
+                    } else {
+                        // Regular single-value filtering for other columns
+                        return cellValue.includes(val);
+                    }
+                })
+            );
+
+            // Sort
+            if (sortConfig.column) {
+                filtered.sort((a, b) => {
+                    const valA = a[sortConfig.column] ?? "";
+                    const valB = b[sortConfig.column] ?? "";
+                    
+                    // Check if both values are numeric
+                    const numA = parseFloat(valA);
+                    const numB = parseFloat(valB);
+                    
+                    if (!isNaN(numA) && !isNaN(numB)) {
+                        // Both are numbers, sort numerically
+                        if (numA < numB) return sortConfig.direction === "asc" ? -1 : 1;
+                        if (numA > numB) return sortConfig.direction === "asc" ? 1 : -1;
+                        return 0;
+                    } else {
+                        // At least one is not a number, sort as strings
+                        const strA = valA.toString().toLowerCase();
+                        const strB = valB.toString().toLowerCase();
+                        if (strA < strB) return sortConfig.direction === "asc" ? -1 : 1;
+                        if (strA > strB) return sortConfig.direction === "asc" ? 1 : -1;
+                        return 0;
+                    }
+                });
+            }
+
+            return filtered;
+        }
+
+        function toggleSort(column, thElement) {
+            // Reset sort if new column
+            if (sortConfig.column !== column) {
+                sortConfig = { column: column, direction: "asc" };
+            } else {
+                // Cycle asc -> desc -> none
+                if (sortConfig.direction === "asc") sortConfig.direction = "desc";
+                else if (sortConfig.direction === "desc") sortConfig = { column: null, direction: null };
+                else sortConfig.direction = "asc";
+            }
+
+            // Update header visual state
+            document.querySelectorAll("#tableHead th").forEach(th => {
+                th.classList.remove("sorted-asc", "sorted-desc");
+            });
+            if (sortConfig.column) {
+                thElement.classList.add(sortConfig.direction === "asc" ? "sorted-asc" : "sorted-desc");
+            }
+
+            renderBody(getFilteredAndSortedRows());
+        }
+
+        // Export functionality
+        document.getElementById("exportCsv").addEventListener("click", function() {
+            exportToCsv();
+        });
+
+        document.getElementById("exportJson").addEventListener("click", function() {
+            exportToJson();
+        });
+
+        function exportToCsv() {
+            const filteredRows = getFilteredAndSortedRows();
+            if (filteredRows.length === 0) {
+                alert("No data to export");
+                return;
+            }
+
+            let csvContent = "";
+            // Add headers
+            csvContent += allColumns.map(col => `"${col}"`).join(",") + "\n";
+            
+            // Add data rows with formatting
+            filteredRows.forEach(row => {
+                const rowData = allColumns.map(col => {
+                    const rawValue = row[col] || "";
+                    const formattedValue = formatCellValue(rawValue, col);
+                    return `"${String(formattedValue).replace(/"/g, '""')}"`;
+                });
+                csvContent += rowData.join(",") + "\n";
+            });
+
+            // Download file
+            const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `query_results_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = "hidden";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function exportToJson() {
+            const filteredRows = getFilteredAndSortedRows();
+            if (filteredRows.length === 0) {
+                alert("No data to export");
+                return;
+            }
+
+            // Create formatted version for display
+            const formattedRows = filteredRows.map(row => {
+                const formattedRow = {};
+                allColumns.forEach(col => {
+                    formattedRow[col] = formatCellValue(row[col], col);
+                });
+                return formattedRow;
+            });
+
+            const jsonData = {
+                columns: allColumns,
+                rows: filteredRows, // Raw data
+                formatted_rows: formattedRows, // Formatted data
+                exported_at: new Date().toISOString(),
+                total_rows: filteredRows.length
+            };
+
+            // Download file
+            const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: "application/json;charset=utf-8;" });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `query_results_${new Date().toISOString().split('T')[0]}.json`);
+            link.style.visibility = "hidden";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
