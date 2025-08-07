@@ -4,96 +4,258 @@
     <meta charset="UTF-8">
     <title>Superset Query Runner</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; cursor: default; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            background: #f4f6fa;
+        }
+        .header {
+            background: linear-gradient(90deg, #007bff 60%, #17a2b8 100%);
+            color: white;
+            padding: 32px 0 24px 0;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            margin-bottom: 32px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.2em;
+            letter-spacing: 1px;
+        }
+        .container {
+            background: white;
+            max-width: 1100px;
+            margin: 0 auto 40px auto;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            padding: 32px 32px 40px 32px;
+        }
+        .nav-links {
+            margin-bottom: 28px;
+            text-align: center;
+        }
+        .nav-links a {
+            background: #007bff;
+            color: white;
+            padding: 10px 22px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 0 8px 8px 0;
+            font-weight: 500;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            transition: background 0.2s;
+            display: inline-block;
+        }
+        .nav-links a:hover {
+            background: #0056b3;
+        }
+        .card-section {
+            margin-bottom: 32px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid #e3e6ee;
+        }
+        .form-row {
+            display: flex;
+            gap: 18px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .form-row > div {
+            min-width: 220px;
+        }
+        label {
+            font-size: 15px;
+            color: #333;
+            font-weight: 500;
+        }
+        input[type="text"], input[type="date"], select {
+            width: 100%;
+            padding: 7px 10px;
+            font-size: 15px;
+            border: 1px solid #cfd8dc;
+            border-radius: 4px;
+            margin-top: 4px;
+            background: #f8fafc;
+            transition: border 0.2s;
+        }
+        input[type="text"]:focus, input[type="date"]:focus, select:focus {
+            border-color: #007bff;
+            outline: none;
+        }
+        button {
+            padding: 9px 22px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            font-size: 15px;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 4px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+            transition: background 0.2s;
+        }
+        button#debugBtn {
+            background: #ffc107;
+            color: #222;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button#debugBtn:hover {
+            background: #e0a800;
+        }
+        .status {
+            margin-top: 18px;
+            font-weight: bold;
+            font-size: 1.1em;
+            color: #007bff;
+            min-height: 24px;
+        }
+        .export-controls {
+            margin: 24px 0 12px 0;
+            display: flex;
+            gap: 12px;
+        }
+        .export-controls button {
+            background: #28a745;
+        }
+        .export-controls button:last-child {
+            background: #17a2b8;
+        }
+        .export-controls button:hover {
+            background: #218838;
+        }
+        .export-controls button:last-child:hover {
+            background: #138496;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 18px;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+        }
+        th, td {
+            border: 1px solid #e3e6ee;
+            padding: 10px 8px;
+            text-align: left;
+            font-size: 15px;
+        }
         th.sortable { cursor: pointer; }
         th.sortable::after { content: " ⬍"; font-size: 0.8em; color: #888; }
         th.sorted-asc::after { content: " ▲"; color: #000; }
         th.sorted-desc::after { content: " ▼"; color: #000; }
-        .filter-input { 
-            width: 90%; 
-            padding: 4px; 
-            font-size: 12px; 
-            border: 1px solid #ddd;
+        tr:nth-child(even) { background: #f8f9fb; }
+        tr:hover { background: #e9f5ff; }
+        .filter-input {
+            width: 90%;
+            padding: 5px;
+            font-size: 13px;
+            border: 1px solid #cfd8dc;
             border-radius: 3px;
+            background: #f8fafc;
         }
         .filter-input[title*="comma"] {
             border-color: #17a2b8;
             background-color: #f8f9fa;
         }
         .multi-filter-info {
-            font-size: 11px;
+            font-size: 12px;
             color: #666;
             font-style: italic;
             margin-top: 5px;
         }
-        .nav-links {
-            margin-bottom: 20px;
+        .tip {
+            background: #e3f2fd;
+            color: #1565c0;
+            border-left: 4px solid #1976d2;
+            padding: 10px 18px;
+            border-radius: 5px;
+            margin: 18px 0 0 0;
+            font-size: 14px;
         }
-        .nav-links a {
-            background: #007bff;
-            color: white;
-            padding: 10px 20px;
-            text-decoration: none;
-            border-radius: 4px;
-            margin-right: 10px;
-        }
-        .nav-links a:hover {
-            background: #0056b3;
+        @media (max-width: 800px) {
+            .container { padding: 12px 2vw; }
+            .form-row { flex-direction: column; gap: 8px; }
         }
     </style>
 </head>
 <body>
-    <h2>Superset Query Runner</h2>
-    
+    <div class="header">
+        <h1>Superset Query Runner</h1>
+        <div style="font-size: 1.1em; font-weight: 400; margin-top: 8px; opacity: 0.93;">Flexible Data Explorer &amp; Export Tool</div>
+    </div>
+    <div class="container">
         <div class="nav-links">
             <a href="/">Query Table</a>
             <a href="/dod-graphs">DoD Graphs</a>
             <a href="/breakout-analysis">Breakout Analysis</a>
             <a href="/aggregate-view">Aggregate View</a>
-        </div>    <form id="queryForm">
-        <div style="display: flex; gap: 15px; align-items: end; flex-wrap: wrap; margin-bottom: 10px;">
-            <div>
-                <label for="deal_name">Deal Name Filters (comma-separated):</label>
-                <input type="text" id="deal_name" name="deal_name" placeholder="e.g. Banijay, PSI, US" style="width: 300px;">
-                <small style="display: block; color: #666;">Use commas to separate multiple filters (AND logic)</small>
-            </div>
-            <div>
-                <label for="date_from">Date From:</label>
-                <input type="date" id="date_from" name="date_from" value="2025-07-01">
-            </div>
-            <div>
-                <label for="date_to">Date To:</label>
-                <input type="date" id="date_to" name="date_to" value="2025-08-03">
-            </div>
-            <div>
-                <button type="submit">Run Query</button>
-                <button type="button" id="debugBtn" style="margin-left: 10px; background: #ffc107; color: black;">Debug Deal ID</button>
-            </div>
         </div>
-    </form>
-
-    <div id="status" style="margin-top: 20px; font-weight: bold;"></div>
-
-    <div id="exportControls" style="margin: 20px 0; display: none;">
-        <button id="exportCsv" style="margin-right: 10px; padding: 8px 16px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Export to CSV</button>
-        <button id="exportJson" style="padding: 8px 16px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer;">Export to JSON</button>
-    </div>
-
-    <table id="resultsTable" style="display:none;">
-        <thead>
-            <tr id="tableHead"></tr>
-            <tr id="filterRow"></tr>
-        </thead>
-        <tbody id="tableBody"></tbody>
-    </table>
-
-    <div id="filterHelp" style="display:none; margin-top: 10px; font-size: 12px; color: #666;">
-        💡 <strong>Tip:</strong> Use commas in the Deal Name filter to require ALL terms to be present (e.g., "US, Entertainment" finds deals containing both words)
+        <div class="card-section">
+            <form id="queryForm">
+                <div class="form-row">
+                    <div>
+                        <label for="deal_name">Deal Name Filters (comma-separated):</label>
+                        <input type="text" id="deal_name" name="deal_name" placeholder="e.g. Banijay, PSI, US">
+                        <div class="multi-filter-info">Use commas to separate multiple filters</div>
+                        <div style="margin-top: 4px;">
+                            <label style="font-size: 13px; color: #333;">Filter Mode:</label>
+                            <select id="dealNameFilterMode" style="font-size: 13px;">
+                                <option value="and">AND (all terms must match)</option>
+                                <option value="or">OR (any term matches)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="date_from">Date From:</label>
+                        <input type="date" id="date_from" name="date_from" value="2025-07-01">
+                    </div>
+                    <div>
+                        <label for="date_to">Date To:</label>
+                        <input type="date" id="date_to" name="date_to" value="2025-08-03">
+                    </div>
+                    <div style="min-width: 180px;">
+                        <button type="submit">Run Query</button>
+                        <button type="button" id="debugBtn" style="margin-left: 10px;">Debug Deal ID</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+        <div class="status" id="status"></div>
+        <div class="export-controls" id="exportControls" style="display: none;">
+            <button id="exportCsv">Export to CSV</button>
+            <button id="exportJson">Export to JSON</button>
+        </div>
+        <table id="resultsTable" style="display:none;">
+            <thead>
+                <tr id="tableHead"></tr>
+                <tr id="filterRow"></tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+        <div class="tip" id="filterHelp" style="display:none;">
+            💡 <strong>Tip:</strong> Use commas in the Deal Name filter to require <b>ALL</b> terms to be present (e.g., "US, Entertainment" finds deals containing both words)
+        </div>
     </div>
 
     <script>
+        // Set all date_to and date_from inputs to today by default
+        document.addEventListener('DOMContentLoaded', function() {
+            const dateInputs = document.querySelectorAll('input[type="date"]');
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const todayStr = `${yyyy}-${mm}-${dd}`;
+            dateInputs.forEach(input => {
+                if (!input.value) input.value = todayStr;
+            });
+        });
         let jobId = null;
         let allRows = [];
         let allColumns = [];
@@ -213,6 +375,24 @@
             return normalized;
         }
 
+        // Metric formulas for tooltips
+        const metricFormulas = {
+            'imps': 'Impressions',
+            'oppos': 'Num_Opportunities',
+            'totalbids': 'is_selected',
+            'fillrate': '(is_selected / num_opportunites) * 100',
+            'renderrate': '(impression / selected) * 100',
+            'winrate': '(is_selected) /real_demand_returned) * 100',
+            'requests': 'Total Demand Requests',
+            'realdemandreturned': 'Candidates(No bid_cache)',
+            'losstotals': 'Real_demand-Impression',
+            'candidates': 'Bids:Real + Bid_Cache)'
+        };
+
+        function normalizeColName(col) {
+            return col.toLowerCase().replace(/[^a-z0-9]/g, '');
+        }
+
         function renderHeader(columns) {
             const tableHead = document.getElementById("tableHead");
             const filterRow = document.getElementById("filterRow");
@@ -221,9 +401,23 @@
             filterRow.innerHTML = "";
 
             columns.forEach(col => {
+                // UI label override
+                let displayCol = col === 'total_bids' ? 'selected_bids' : col;
                 const th = document.createElement("th");
-                th.innerText = col;
+                th.innerText = displayCol;
                 th.classList.add("sortable");
+
+                // Add tooltip for metric formulas (case/space/underscore insensitive)
+                const normCol = normalizeColName(col);
+                if (metricFormulas[normCol]) {
+                  th.title = metricFormulas[normCol];
+                  th.style.textDecoration = "underline dotted #888";
+                  th.style.cursor = "help";
+                } else {
+                  th.title = "";
+                  th.style.textDecoration = "";
+                  th.style.cursor = "pointer";
+                }
 
                 th.addEventListener("click", () => toggleSort(col, th));
                 tableHead.appendChild(th);
@@ -238,8 +432,8 @@
                 
                 // Special handling for deal_name column
                 if (col.toLowerCase().includes('deal_name') || col.toLowerCase().includes('dealname')) {
-                    input.placeholder = "Filter (comma-separated, ALL must match)";
-                    input.title = "Enter multiple values separated by commas - ALL terms must be present (e.g., US, Entertainment)";
+                    input.placeholder = "Filter (comma-separated)";
+                    input.title = "Enter multiple values separated by commas";
                 } else {
                     input.placeholder = "Filter...";
                 }
@@ -261,8 +455,9 @@
                 const tr = document.createElement("tr");
                 allColumns.forEach(col => {
                     const td = document.createElement("td");
+                    // UI label override for header, but keep data key
                     const rawValue = row[col] ?? "";
-                    td.innerText = formatCellValue(rawValue, col);
+                    td.innerText = formatCellValue(rawValue, col === 'total_bids' ? 'selected_bids' : col);
                     tr.appendChild(td);
                 });
                 tableBody.appendChild(tr);
@@ -330,16 +525,19 @@
             let filtered = allRows.filter(row =>
                 Object.entries(filterValues).every(([col, val]) => {
                     if (!val) return true; // No filter value
-                    
                     const cellValue = (row[col] ?? "").toString().toLowerCase();
-                    
                     // Special handling for deal_name columns - support comma-separated multiple values
                     if (col.toLowerCase().includes('deal_name') || col.toLowerCase().includes('dealname')) {
-                        // Split filter value by comma and check if ALL of the values match (AND logic)
                         const filterTerms = val.split(',').map(term => term.trim()).filter(term => term);
                         if (filterTerms.length === 0) return true;
-                        
-                        return filterTerms.every(term => cellValue.includes(term));
+                        const mode = document.getElementById('dealNameFilterMode')?.value || 'and';
+                        if (mode === 'or') {
+                            // OR: at least one term matches
+                            return filterTerms.some(term => cellValue.includes(term));
+                        } else {
+                            // AND: all terms must match
+                            return filterTerms.every(term => cellValue.includes(term));
+                        }
                     } else {
                         // Regular single-value filtering for other columns
                         return cellValue.includes(val);
@@ -352,18 +550,25 @@
                 filtered.sort((a, b) => {
                     const valA = a[sortConfig.column] ?? "";
                     const valB = b[sortConfig.column] ?? "";
-                    
+                    // Date column special handling
+                    if (sortConfig.column.toLowerCase().includes('date')) {
+                        // Try to parse as date
+                        const dateA = new Date(valA);
+                        const dateB = new Date(valB);
+                        if (!isNaN(dateA) && !isNaN(dateB)) {
+                            if (dateA < dateB) return sortConfig.direction === "asc" ? -1 : 1;
+                            if (dateA > dateB) return sortConfig.direction === "asc" ? 1 : -1;
+                            return 0;
+                        }
+                    }
                     // Check if both values are numeric
                     const numA = parseFloat(valA);
                     const numB = parseFloat(valB);
-                    
                     if (!isNaN(numA) && !isNaN(numB)) {
-                        // Both are numbers, sort numerically
                         if (numA < numB) return sortConfig.direction === "asc" ? -1 : 1;
                         if (numA > numB) return sortConfig.direction === "asc" ? 1 : -1;
                         return 0;
                     } else {
-                        // At least one is not a number, sort as strings
                         const strA = valA.toString().toLowerCase();
                         const strB = valB.toString().toLowerCase();
                         if (strA < strB) return sortConfig.direction === "asc" ? -1 : 1;
@@ -372,7 +577,6 @@
                     }
                 });
             }
-
             return filtered;
         }
 
@@ -415,14 +619,14 @@
             }
 
             let csvContent = "";
-            // Add headers
-            csvContent += allColumns.map(col => `"${col}"`).join(",") + "\n";
+            // Add headers (override total_bids label)
+            csvContent += allColumns.map(col => `"${col === 'total_bids' ? 'selected_bids' : col}"`).join(",") + "\n";
             
             // Add data rows with formatting
             filteredRows.forEach(row => {
                 const rowData = allColumns.map(col => {
                     const rawValue = row[col] || "";
-                    const formattedValue = formatCellValue(rawValue, col);
+                    const formattedValue = formatCellValue(rawValue, col === 'total_bids' ? 'selected_bids' : col);
                     return `"${String(formattedValue).replace(/"/g, '""')}"`;
                 });
                 csvContent += rowData.join(",") + "\n";
@@ -451,13 +655,13 @@
             const formattedRows = filteredRows.map(row => {
                 const formattedRow = {};
                 allColumns.forEach(col => {
-                    formattedRow[col] = formatCellValue(row[col], col);
+                    formattedRow[col === 'total_bids' ? 'selected_bids' : col] = formatCellValue(row[col], col === 'total_bids' ? 'selected_bids' : col);
                 });
                 return formattedRow;
             });
 
             const jsonData = {
-                columns: allColumns,
+                columns: allColumns.map(col => col === 'total_bids' ? 'selected_bids' : col),
                 rows: filteredRows, // Raw data
                 formatted_rows: formattedRows, // Formatted data
                 exported_at: new Date().toISOString(),

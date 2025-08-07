@@ -4,38 +4,122 @@
     <meta charset="UTF-8">
     <title>Provider Breakout Analysis</title>
     <style>
+        /* Modern tab styles */
+        .tab-container {
+            display: flex;
+            border-bottom: 2px solid #e0e0e0;
+            background: #f8f9fa;
+            margin-bottom: 16px;
+            border-radius: 8px 8px 0 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            overflow-x: auto;
+        }
+        .tab {
+            background: none;
+            border: none;
+            outline: none;
+            padding: 12px 32px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #555;
+            border-radius: 8px 8px 0 0;
+            margin-right: 4px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+            box-shadow: none;
+        }
+        .tab:last-child {
+            margin-right: 0;
+        }
+        .tab.active {
+            background: #007bff;
+            color: #fff;
+            box-shadow: 0 2px 8px rgba(0,123,255,0.08);
+            z-index: 2;
+        }
+        .tab.reseller.active {
+            background: #28a745;
+            color: #fff;
+        }
+        .tab.vod.active {
+            background: #dc3545;
+            color: #fff;
+        }
+        .tab:not(.active):hover {
+            background: #e9ecef;
+            color: #007bff;
+        }
+        /* Excel-style conditional formatting */
+        .fill-rate-high { background: #d4edda; color: #155724; font-weight: bold; }
+        .fill-rate-medium { background: #fff3cd; color: #856404; font-weight: bold; }
+        .fill-rate-low { background: #f8d7da; color: #721c24; font-weight: bold; }
+        .imps-high { background: #e6f4ea; color: #155724; }
+        .imps-medium { background: #fffbe6; color: #856404; }
+        .imps-low { background: #fbeee6; color: #721c24; }
         body { 
             font-family: Arial, sans-serif; 
             margin: 20px; 
-            background-color: #f5f5f5;
+            background: #f8f9fa;
+            padding: 10px 8px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+            font-weight: bold;
+            font-size: 10px;
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
-        .header {
+        .table-container {
+            width: 100%;
+            overflow-x: auto;
+            padding-bottom: 8px;
+        }
+        .provider-table {
+            width: max-content;
+            min-width: 80%;
+            border-collapse: collapse;
+            margin: 0 auto;
+        }
+        .provider-table td {
+            padding: 10px 8px;
+            text-align: center;
+            border: 1px solid #dee2e6;
+            font-size: 11px;
+            white-space: nowrap;
             background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
         }
-        .nav-links {
-            margin-bottom: 20px;
+        .provider-table .provider-name {
+            text-align: left;
+            font-weight: bold;
+            background: #f8f9fa;
+            min-width: 150px;
+            word-wrap: break-word;
+            font-size: 12px;
+            padding: 10px 12px;
+            position: sticky;
+            left: 0;
+            z-index: 11;
+            box-shadow: 2px 0 2px -1px #dee2e6;
         }
-        .nav-links a {
-            background: #007bff;
-            color: white;
-            padding: 10px 20px;
-            text-decoration: none;
-            border-radius: 4px;
-            margin-right: 10px;
+        .provider-table th.provider-name {
+            left: 0;
+            z-index: 12;
+            position: sticky;
+            background: #f8f9fa;
+            box-shadow: 2px 0 2px -1px #dee2e6;
         }
-        .nav-links a:hover {
-            background: #0056b3;
+        .imps-cell {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #1a237e;
+            margin-bottom: 2px;
+            line-height: 1.2;
         }
-        .form-container {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+        .fill-rate-cell {
+            font-size: 0.9em;
+            color: #888;
+            font-weight: normal;
+            margin-top: 1px;
         }
         .form-row {
             display: flex;
@@ -88,157 +172,7 @@
             background: #e8f5e8;
             color: #2e7d32;
         }
-        .breakout-container {
-            margin-top: 20px;
-        }
-        .tab-container {
-            display: flex;
-            border-bottom: 2px solid #ddd;
-            margin-bottom: 20px;
-        }
-        .tab {
-            padding: 12px 24px;
-            cursor: pointer;
-            border: none;
-            background: #f8f9fa;
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            margin-right: 4px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-        }
-        .tab:hover {
-            background: #e9ecef;
-        }
-        .tab.active {
-            background: #007bff;
-            color: white;
-        }
-        .tab.reseller.active {
-            background: #28a745;
-        }
-        .tab.vod.active {
-            background: #dc3545;
-        }
-        .breakout-section {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            overflow: hidden;
-            display: none;
-        }
-        .breakout-section.active {
-            display: block;
-        }
-        .section-header {
-            background: #007bff;
-            color: white;
-            padding: 15px 20px;
-            font-size: 18px;
-            font-weight: bold;
-        }
-        .section-header.reseller {
-            background: #28a745;
-        }
-        .section-header.vod {
-            background: #dc3545;
-        }
-        .table-container {
-            overflow-x: auto;
-            max-height: 70vh;
-            overflow-y: auto;
-        }
-        .provider-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 11px;
-            min-width: 800px;
-        }
-        .provider-table th {
-            background: #f8f9fa;
-            padding: 10px 8px;
-            text-align: center;
-            border: 1px solid #dee2e6;
-            font-weight: bold;
-            font-size: 10px;
-            position: sticky;
-            top: 0;
-            z-index: 10;
-        }
-        .provider-table td {
-            padding: 8px 6px;
-            text-align: center;
-            border: 1px solid #dee2e6;
-            font-size: 9px;
-            white-space: nowrap;
-        }
-        .provider-table .provider-name {
-            text-align: left;
-            font-weight: bold;
-            background: #f8f9fa;
-            min-width: 150px;
-            word-wrap: break-word;
-            font-size: 10px;
-            padding: 8px 10px;
-            position: sticky;
-            left: 0;
-            z-index: 5;
-        }
-        .fill-rate-cell {
-            font-weight: normal;
-            min-width: 50px;
-            font-size: 8px;
-            color: #666;
-        }
-        .imps-cell {
-            font-weight: bold;
-            color: #333;
-            font-size: 10px;
-        }
-        .fill-rate-high {
-            background: rgba(40, 167, 69, 0.1);
-            color: #155724;
-        }
-        .fill-rate-medium {
-            background: rgba(255, 193, 7, 0.1);
-            color: #856404;
-        }
-        .fill-rate-low {
-            background: rgba(220, 53, 69, 0.1);
-            color: #721c24;
-        }
-        .date-header {
-            writing-mode: vertical-rl;
-            text-orientation: mixed;
-            min-width: 60px;
-            font-size: 9px;
-            max-width: 60px;
-        }
-        .totals-column {
-            background: #e9ecef;
-            font-weight: bold;
-            min-width: 70px;
-        }
-        .no-data {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-            font-style: italic;
-        }
-        @media (max-width: 768px) {
-            .form-row {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            .provider-table {
-                font-size: 10px;
-            }
-            .provider-table th,
-            .provider-table td {
-                padding: 4px 2px;
-                font-size: 9px;
-            }
-        }
+    </style>
     </style>
 </head>
 <body>
@@ -251,21 +185,18 @@
             <a href="/aggregate-view">Aggregate View</a>
         </div>
     </div>
-
     <div class="form-container">
         <form id="breakoutForm">
-            <div class="form-row">
-                <div class="form-group">
+            <div class="form-row" style="flex-wrap:nowrap; gap:10px; align-items:flex-end;">
+                <div class="form-group" style="min-width:120px;">
                     <label for="date_from">Date From:</label>
                     <input type="date" id="date_from" name="date_from" value="2025-07-01">
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="min-width:120px;">
                     <label for="date_to">Date To:</label>
                     <input type="date" id="date_to" name="date_to" value="2025-08-03">
                 </div>
-                <div class="form-group">
-                    <button type="submit" class="btn btn-primary">Generate Breakout Analysis</button>
-                </div>
+                <button type="submit" class="btn btn-primary" style="margin-top:22px;">Generate Breakout Analysis</button>
             </div>
         </form>
     </div>
@@ -274,49 +205,46 @@
 
     <div class="breakout-container" id="breakoutContainer" style="display: none;">
         <div class="tab-container">
-            <button class="tab active" data-section="standard">Standard Providers</button>
-            <button class="tab reseller" data-section="reseller">Reseller Providers</button>
-            <button class="tab vod" data-section="vod">VOD Providers</button>
+            <button type="button" class="tab active" data-section="standard">Standard Providers</button>
+            <button type="button" class="tab reseller" data-section="reseller">Reseller Providers</button>
+            <button type="button" class="tab vod" data-section="vod">VOD Providers</button>
         </div>
-        
-        <div class="breakout-section active" id="standardSection">
-            <div class="section-header">Standard Providers (No Reseller/VOD)</div>
-            <div class="table-container">
-                <div id="standardTable"></div>
-            </div>
-        </div>
-        
-        <div class="breakout-section" id="resellerSection">
-            <div class="section-header reseller">Reseller Providers</div>
-            <div class="table-container">
-                <div id="resellerTable"></div>
-            </div>
-        </div>
-        
-        <div class="breakout-section" id="vodSection">
-            <div class="section-header vod">VOD Providers</div>
-            <div class="table-container">
-                <div id="vodTable"></div>
-            </div>
+        <div class="table-container">
+            <div id="providerTable"></div>
         </div>
     </div>
 
     <script>
-        // Tab functionality
-        document.addEventListener('click', function(e) {
-            if (e.target.classList.contains('tab')) {
-                // Remove active class from all tabs and sections
-                document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-                document.querySelectorAll('.breakout-section').forEach(section => section.classList.remove('active'));
-                
-                // Add active class to clicked tab
-                e.target.classList.add('active');
-                
-                // Show corresponding section
-                const sectionName = e.target.getAttribute('data-section');
-                document.getElementById(sectionName + 'Section').classList.add('active');
-            }
+        // Only render the active provider table for the selected tab
+        let breakoutData = null;
+        let dateRangeLabel = '';
+        document.addEventListener('DOMContentLoaded', function() {
+            var tabs = document.querySelectorAll('.tab');
+            tabs.forEach(function(tab) {
+                tab.addEventListener('click', function() {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    renderActiveProviderTable();
+                });
+            });
         });
+
+        function renderActiveProviderTable() {
+            if (!breakoutData) return;
+            var activeTab = document.querySelector('.tab.active');
+            var section = activeTab ? activeTab.getAttribute('data-section') : 'standard';
+            var tableDiv = document.getElementById('providerTable');
+            tableDiv.innerHTML = '';
+            let providers = breakoutData[section] || [];
+            let title = '';
+            if (section === 'standard') title = 'Standard Providers (No Reseller/VOD)';
+            else if (section === 'reseller') title = 'Reseller Providers';
+            else if (section === 'vod') title = 'VOD Providers';
+            if (providers.length > 0) {
+                tableDiv.innerHTML = `<div class="section-header${section !== 'standard' ? ' ' + section : ''}">${title}</div>`;
+            }
+            createProviderTable('providerTable', providers, title);
+        }
 
         document.getElementById('breakoutForm').addEventListener('submit', function(e) {
             e.preventDefault();
@@ -366,10 +294,10 @@
         }
 
         function createBreakoutTables(data, dateRange) {
-            // Create tables for each provider type
-            createProviderTable('standardTable', data.standard, 'Standard Providers');
-            createProviderTable('resellerTable', data.reseller, 'Reseller Providers');
-            createProviderTable('vodTable', data.vod, 'VOD Providers');
+            // Store data globally and render only the active tab's table
+            breakoutData = data;
+            dateRangeLabel = dateRange;
+            renderActiveProviderTable();
         }
 
         function createProviderTable(containerId, providers, title) {
@@ -389,7 +317,6 @@
 
             // Create table HTML
             let tableHTML = '<table class="provider-table">';
-            
             // Header row
             tableHTML += '<thead><tr>';
             tableHTML += '<th class="provider-name">Provider</th>';
@@ -403,13 +330,11 @@
             tableHTML += '<th class="totals-column">Imps</th>';
             tableHTML += '<th class="totals-column">Fill Rate</th>';
             tableHTML += '</tr></thead>';
-            
             // Data rows
             tableHTML += '<tbody>';
             providers.forEach(provider => {
                 tableHTML += '<tr>';
                 tableHTML += `<td class="provider-name">${provider.deal_name}</td>`;
-                
                 // Date columns
                 sortedDates.forEach(date => {
                     const dayData = provider.dates[date];
@@ -417,36 +342,57 @@
                         const fillRate = dayData.fill_rate;
                         const imps = dayData.imps;
                         const fillRateClass = getFillRateClass(fillRate);
+                        const impsClass = getImpsClass(imps);
                         tableHTML += `<td>`;
-                        tableHTML += `<div class="imps-cell">${Math.round(imps).toLocaleString()}</div>`;
+                        tableHTML += `<div class="imps-cell ${impsClass}">${Math.round(imps).toLocaleString()}</div>`;
                         tableHTML += `<div class="fill-rate-cell ${fillRateClass}">${fillRate.toFixed(1)}%</div>`;
                         tableHTML += `</td>`;
                     } else {
                         tableHTML += '<td>-</td>';
                     }
                 });
-                
                 // Totals columns
                 const totalFillRate = provider.totals.fill_rate;
                 const totalImps = provider.totals.imps;
                 const totalFillRateClass = getFillRateClass(totalFillRate);
-                tableHTML += `<td class="totals-column">${Math.round(totalImps).toLocaleString()}</td>`;
-                tableHTML += `<td class="totals-column">`;
-                tableHTML += `<div class="fill-rate-cell ${totalFillRateClass}">${totalFillRate.toFixed(1)}%</div>`;
-                tableHTML += `</td>`;
-                
+                const totalImpsClass = getImpsClass(totalImps);
+                tableHTML += `<td class="totals-column ${totalImpsClass}"><div class="imps-cell">${Math.round(totalImps).toLocaleString()}</div></td>`;
+                tableHTML += `<td class="totals-column"><div class="fill-rate-cell ${totalFillRateClass}">${totalFillRate.toFixed(1)}%</div></td>`;
                 tableHTML += '</tr>';
             });
             tableHTML += '</tbody></table>';
-            
             container.innerHTML = tableHTML;
         }
 
         function getFillRateClass(fillRate) {
             if (fillRate >= 70) return 'fill-rate-high';
             if (fillRate >= 40) return 'fill-rate-medium';
-            return 'fill-rate-low';
+            if (fillRate > 0) return 'fill-rate-low';
+            return '';
+        }
+
+        // Excel-style conditional formatting for imps (green=high, red=low)
+        function getImpsClass(imps) {
+            if (imps >= 1000000) return 'imps-high';
+            if (imps >= 100000) return 'imps-medium';
+            if (imps > 0) return 'imps-low';
+            return '';
         }
     </script>
 </body>
+</html>
+<script>
+// Set all date_to and date_from inputs to today by default on page load
+document.addEventListener('DOMContentLoaded', function() {
+  var dateInputs = document.querySelectorAll('input[type="date"]');
+  var today = new Date();
+  var yyyy = today.getFullYear();
+  var mm = String(today.getMonth() + 1).padStart(2, '0');
+  var dd = String(today.getDate()).padStart(2, '0');
+  var todayStr = yyyy + '-' + mm + '-' + dd;
+  dateInputs.forEach(function(input) {
+    if (!input.value) input.value = todayStr;
+  });
+});
+</script>
 </html>

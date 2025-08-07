@@ -77,4 +77,22 @@ def get_cached_results_optimized(deal_names, date_from, date_to):
     with db_pool.get_connection() as conn:
         cursor = conn.cursor()
         # Your existing query logic here
-        pass
+        cursor.execute("""
+            SELECT 
+                d.id AS deal_id,
+                d.name AS deal_name,
+                d.date AS deal_date,
+                SUM(f.is_selected) AS selected_bids,
+                COUNT(f.id) AS total_bids
+            FROM 
+                deals d
+            LEFT JOIN 
+                bids f ON d.id = f.deal_id
+            WHERE 
+                d.name IN ({})
+                AND d.date BETWEEN ? AND ?
+            GROUP BY 
+                d.id
+        """.format(','.join('?'*len(deal_names))), (*deal_names, date_from, date_to))
+        results = cursor.fetchall()
+        return results

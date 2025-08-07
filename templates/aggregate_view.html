@@ -382,3 +382,18 @@
     </script>
 </body>
 </html>
+<script>
+// Set all date_to and date_from inputs to today by default on page load
+document.addEventListener('DOMContentLoaded', function() {
+  var dateInputs = document.querySelectorAll('input[type="date"]');
+  var today = new Date();
+  var yyyy = today.getFullYear();
+  var mm = String(today.getMonth() + 1).padStart(2, '0');
+  var dd = String(today.getDate()).padStart(2, '0');
+  var todayStr = yyyy + '-' + mm + '-' + dd;
+  dateInputs.forEach(function(input) {
+    if (!input.value) input.value = todayStr;
+  });
+});
+</script>
+</html>

@@ -33,7 +33,7 @@ SELECT
     SUM(f.is_impressed) AS imps,
     SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END) AS real_demand_returned,
     SUM(f.num_opportunities) AS oppos,
-    SUM(f.is_selected) AS total_bids,
+    SUM(f.is_selected) AS selected_bids,
     SUM(CASE WHEN f.is_impressed IS NULL AND f.event_type = 'candidate' AND f.ad_fetch_source IS NULL THEN 1 ELSE 0 END) AS Loss_Totals,
     (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.num_opportunities), 0)) * 100.00 AS fill_rate,
     SUM(CASE WHEN f.event_type = 'demand_request' THEN 1 ELSE 0 END) AS Requests,
