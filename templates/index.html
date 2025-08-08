@@ -138,12 +138,28 @@
             border-radius: 8px;
             overflow: hidden;
             box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+            position: relative;
         }
         th, td {
             border: 1px solid #e3e6ee;
             padding: 10px 8px;
             text-align: left;
             font-size: 15px;
+        }
+
+        /* Sticky filter row (date and column filters) */
+        thead tr#filterRow {
+            position: sticky;
+            top: 54px; /* Height of the table header row (th) */
+            background: #f4f6fa;
+            z-index: 2;
+        }
+        /* Make the table header sticky as well for best effect */
+        thead tr#tableHead {
+            position: sticky;
+            top: 0;
+            background: #fff;
+            z-index: 3;
         }
         th.sortable { cursor: pointer; }
         th.sortable::after { content: " ⬍"; font-size: 0.8em; color: #888; }
@@ -217,7 +233,7 @@
                     </div>
                     <div>
                         <label for="date_to">Date To:</label>
-                        <input type="date" id="date_to" name="date_to" value="2025-08-03">
+                        <input type="date" id="date_to" name="date_to">
                     </div>
                     <div style="min-width: 180px;">
                         <button type="submit">Run Query</button>

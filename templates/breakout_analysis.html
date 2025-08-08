@@ -50,12 +50,13 @@
             color: #007bff;
         }
         /* Excel-style conditional formatting */
-        .fill-rate-high { background: #d4edda; color: #155724; font-weight: bold; }
-        .fill-rate-medium { background: #fff3cd; color: #856404; font-weight: bold; }
-        .fill-rate-low { background: #f8d7da; color: #721c24; font-weight: bold; }
-        .imps-high { background: #e6f4ea; color: #155724; }
-        .imps-medium { background: #fffbe6; color: #856404; }
-        .imps-low { background: #fbeee6; color: #721c24; }
+        /* Softer, wider color gradients for conditional formatting */
+        .fill-rate-high { background: #e3fbe8; color: #1b5e20; font-weight: bold; }
+        .fill-rate-medium { background: #fffbe6; color: #bfa100; font-weight: bold; }
+        .fill-rate-low { background: #ffeaea; color: #b71c1c; font-weight: bold; }
+        .imps-high { background: #e3f2fd; color: #1565c0; }
+        .imps-medium { background: #fffde7; color: #bfa100; }
+        .imps-low { background: #ffebee; color: #b71c1c; }
         body { 
             font-family: Arial, sans-serif; 
             margin: 20px; 
@@ -71,6 +72,7 @@
         }
         .table-container {
             width: 100%;
+            max-width: 98vw;
             overflow-x: auto;
             padding-bottom: 8px;
         }
@@ -79,14 +81,58 @@
             min-width: 80%;
             border-collapse: collapse;
             margin: 0 auto;
+            font-size: 1.13em;
         }
-        .provider-table td {
-            padding: 10px 8px;
+        .provider-table th, .provider-table td {
+            padding: 8px 10px;
             text-align: center;
             border: 1px solid #dee2e6;
-            font-size: 11px;
+            font-size: 1.13em;
             white-space: nowrap;
             background: white;
+        }
+        .provider-table th {
+            background: #f4f6fb;
+            font-size: 1.15em;
+            font-weight: 700;
+            color: #1a237e;
+            letter-spacing: 0.02em;
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }
+        /* Make date header cells sticky below the main header */
+        .provider-table th.date-header {
+            position: sticky;
+            top: 48px; /* Height of the main header row */
+            background: #f4f6fb;
+            z-index: 19;
+        }
+        }
+        .provider-table .provider-name, .provider-table th.provider-name {
+            position: sticky;
+            left: 0;
+            z-index: 21;
+            background: #f8f9fa;
+            box-shadow: 2px 0 2px -1px #dee2e6;
+            text-align: left;
+            font-weight: bold;
+            min-width: 150px;
+            word-wrap: break-word;
+            font-size: 1.35em;
+            padding: 12px 18px;
+            color: #0d1a4d;
+            letter-spacing: 0.5px;
+        }
+        .provider-table tr:nth-child(even) td {
+            background: #f8f9fb;
+        }
+        .provider-table tr:hover td {
+            background: #e3f2fd;
+        }
+        .provider-table .totals-column {
+            background: #f1f8e9;
+            border-left: 2px solid #b2dfdb;
         }
         .provider-table .provider-name {
             text-align: left;
@@ -94,12 +140,14 @@
             background: #f8f9fa;
             min-width: 150px;
             word-wrap: break-word;
-            font-size: 12px;
-            padding: 10px 12px;
+            font-size: 1.35em;
+            padding: 12px 18px;
             position: sticky;
             left: 0;
             z-index: 11;
             box-shadow: 2px 0 2px -1px #dee2e6;
+            color: #0d1a4d;
+            letter-spacing: 0.5px;
         }
         .provider-table th.provider-name {
             left: 0;
@@ -109,9 +157,9 @@
             box-shadow: 2px 0 2px -1px #dee2e6;
         }
         .imps-cell {
-            font-size: 1.2em;
+            font-size: 1.22em;
             font-weight: bold;
-            color: #1a237e;
+            color: #1976d2;
             margin-bottom: 2px;
             line-height: 1.2;
         }
@@ -172,18 +220,49 @@
             background: #e8f5e8;
             color: #2e7d32;
         }
-    </style>
+    /* Modern nav bar styles */
+    .nav-bar {
+        display: flex;
+        justify-content: center;
+        gap: 18px;
+        margin-bottom: 18px;
+    }
+    .nav-link {
+        display: inline-block;
+        padding: 10px 26px;
+        font-size: 1.13em;
+        font-weight: 600;
+        color: #1a237e;
+        background: #f4f6fb;
+        border-radius: 6px 6px 0 0;
+        text-decoration: none;
+        transition: background 0.18s, color 0.18s, box-shadow 0.18s;
+        box-shadow: 0 2px 8px rgba(26,35,126,0.04);
+        border-bottom: 2px solid transparent;
+    }
+    .nav-link:hover {
+        background: #e3e7f7;
+        color: #0d47a1;
+        border-bottom: 2px solid #1976d2;
+    }
+    .nav-link.active {
+        background: #1976d2;
+        color: #fff;
+        border-bottom: 2px solid #1976d2;
+        box-shadow: 0 4px 12px rgba(25,118,210,0.10);
+        cursor: default;
+    }
     </style>
 </head>
 <body>
     <div class="header">
         <h1>Provider Breakout Analysis</h1>
-        <div class="nav-links">
-            <a href="/">Query Table</a>
-            <a href="/dod-graphs">DoD Graphs</a>
-            <a href="/breakout-analysis">Breakout Analysis</a>
-            <a href="/aggregate-view">Aggregate View</a>
-        </div>
+        <nav class="nav-bar">
+            <a href="/" class="nav-link">Query Table</a>
+            <a href="/dod-graphs" class="nav-link">DoD Graphs</a>
+            <a href="/breakout-analysis" class="nav-link active">Breakout Analysis</a>
+            <a href="/aggregate-view" class="nav-link">Aggregate View</a>
+        </nav>
     </div>
     <div class="form-container">
         <form id="breakoutForm">
@@ -194,7 +273,7 @@
                 </div>
                 <div class="form-group" style="min-width:120px;">
                     <label for="date_to">Date To:</label>
-                    <input type="date" id="date_to" name="date_to" value="2025-08-03">
+                    <input type="date" id="date_to" name="date_to">
                 </div>
                 <button type="submit" class="btn btn-primary" style="margin-top:22px;">Generate Breakout Analysis</button>
             </div>
@@ -302,22 +381,19 @@
 
         function createProviderTable(containerId, providers, title) {
             const container = document.getElementById(containerId);
-            
             if (!providers || providers.length === 0) {
                 container.innerHTML = '<div class="no-data">No data available for this provider type</div>';
                 return;
             }
-
             // Get all unique dates across all providers
             const allDates = new Set();
             providers.forEach(provider => {
                 Object.keys(provider.dates).forEach(date => allDates.add(date));
             });
             const sortedDates = Array.from(allDates).sort().reverse(); // Most recent first
-
             // Create table HTML
             let tableHTML = '<table class="provider-table">';
-            // Header row
+            // Header row (dates)
             tableHTML += '<thead><tr>';
             tableHTML += '<th class="provider-name">Provider</th>';
             sortedDates.forEach(date => {
@@ -335,7 +411,6 @@
             providers.forEach(provider => {
                 tableHTML += '<tr>';
                 tableHTML += `<td class="provider-name">${provider.deal_name}</td>`;
-                // Date columns
                 sortedDates.forEach(date => {
                     const dayData = provider.dates[date];
                     if (dayData) {
@@ -384,15 +459,15 @@
 <script>
 // Set all date_to and date_from inputs to today by default on page load
 document.addEventListener('DOMContentLoaded', function() {
-  var dateInputs = document.querySelectorAll('input[type="date"]');
   var today = new Date();
   var yyyy = today.getFullYear();
   var mm = String(today.getMonth() + 1).padStart(2, '0');
   var dd = String(today.getDate()).padStart(2, '0');
   var todayStr = yyyy + '-' + mm + '-' + dd;
-  dateInputs.forEach(function(input) {
+  // Set all 'to date' calendars to today if empty
+  var toDateInputs = document.querySelectorAll('input[type="date"][id$="to"], input[type="date"][name$="to"], input[type="date"][id$="date_to"], input[type="date"][name$="date_to"]');
+  toDateInputs.forEach(function(input) {
     if (!input.value) input.value = todayStr;
   });
 });
 </script>
-</html>
