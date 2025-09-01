@@ -1,3 +1,7 @@
+
+
+
+
 from flask import Flask, render_template, request, jsonify
 import requests
 import json
@@ -8,6 +12,7 @@ from datetime import datetime, timedelta
 import schedule
 import time
 import logging
+import time as time_module
 
 app = Flask(__name__)
 application = app
@@ -19,27 +24,69 @@ SUPERSET_HEADERS = {
     "Content-Type": "application/json",
     "Referer": "https://superset.de.gcp.rokulabs.net/sqllab/",
     "Origin": "https://superset.de.gcp.rokulabs.net",
-    "X-CSRFToken": "IjY5NTkwYWQ5NDZkZGU4ZjFmMDE4YWM1OTAzMWMxOGVjMmVhN2EyZGMi.aI_eMg.wqTQAgFNco6h8bC7E8UTpYs4SKc",
-    "Cookie": "session=.eJxVjk1LAzEUAP9LzhXykpe8pDehokIvSkE8Ldn3QUvLLuy2ooj_3YAnrwMzzLcbbNH16LbX5aYbN5zEbR1XkMIjcVL2FbAa-1TQhESjegLvE4ZYGBijYSMsDbHGKC2YVuTgx1pUyUfvx0LNMEq2REAgqYwsBJaz-aaUQayOMYBQbMDZ2KrrI7dVl78bQAqd8LrYcJ3POnWWa6q-ScUsosXAPJTGnUVgKMpBG7Ug3L3LzO2i3enixs0n4eFf6nx9_WzDPj5_3I14__4QDl9PaXd4Oe6nKcDjm_v5BWS1Vgo.aI_dyQ.vaP1EMwptCPu88FaiKByWt03Gdo"
+    "X-CSRFToken": "IjI0MmQ0NTBmYmI4M2E4MmJjNGVlNmY3ZTVlNDMxOWExMzFiMDI1NWMi.aKzcnA.0aFaT4OmDGEJWYRY5uliRRdiX_Y",
+    "Cookie": "session=.eJyNjkFLAzEUhP9KyXkPyXtJ9m1vUi2KqJeKoMjykrx01y4tbuqhlv53A568eRpmmG-Ys-rzxGWQopZvZ7U4VlGJ91uZVaOuYpRSFmNZXMt-lKTeL81_Su9NnZ2lDGqZeSpS7ZjUUkUhDYGdNb6z4DSSsAdOmFAykHhEcroTAOTYMvrQhjZrShjAevBCNmayRixJIpMsg48GgVg4Wu0DdjGRNjmQ1mKsz5jAtRWgNmjR9W3_VWT-fWNsCzWJZc798bCTfc3AQrJO5xAImSBEK-JzK04smo4NmqDBuVi56RB5kspUsFGHMcX-z9QHr3en1c1qOH3fDi_m2aynx83n5v71bv0wP2236vIDGjNx1w.aKzc8Q.pFVCR9H8ZCCfjj3IzqU-Lv-neRc"
 }
 SUPERSET_DB_ID = 2
 
+# Create a session for maintaining cookies
+def create_superset_session():
+    session = requests.Session()
+    session.headers.update(SUPERSET_HEADERS)
+    return session
+
+SUPERSET_SESSION = create_superset_session()
+
 # --- Query Template ---
 QUERY_TEMPLATE = """
+WITH filtered_deals AS (
+    SELECT DISTINCT id, name
+    FROM ads.dim_rams_deals_history
+    WHERE date_key BETWEEN '{date_from}' AND '{date_to}' 
+      {deal_name_condition}
+)
 SELECT 
     f.date_key,
-    d AS deal_id,
-    h.name AS deal_name,
+    d.id AS deal_id,
+    d.name AS deal_name,
     SUM(f.is_impressed) AS imps,
     SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END) AS real_demand_returned,
+    SUM(CASE WHEN f.ad_fetch_source IS NOT NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END) AS Bid_Cache_demand,
     SUM(f.num_opportunities) AS oppos,
-    SUM(f.is_selected) AS selected_bids,
+    SUM(f.is_selected) AS total_bids,
     SUM(CASE WHEN f.is_impressed IS NULL AND f.event_type = 'candidate' AND f.ad_fetch_source IS NULL THEN 1 ELSE 0 END) AS Loss_Totals,
     (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.num_opportunities), 0)) * 100.00 AS fill_rate,
     SUM(CASE WHEN f.event_type = 'demand_request' THEN 1 ELSE 0 END) AS Requests,
     (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.is_selected), 0)) * 100.00 AS render_rate,
     (SUM(f.is_selected) * 1.000 / NULLIF(SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END), 0)) * 100.00 AS win_rate,
     SUM(CASE WHEN f.event_type = 'candidate' THEN 1 ELSE 0 END) AS candidates
+FROM advertising.demand_funnel f
+JOIN filtered_deals d
+  ON CONTAINS(f.deal_id, d.id)   -- pruning without full UNNEST
+WHERE f.date_key BETWEEN '{date_from}' AND '{date_to}'
+  AND CONTAINS(f.demand_systems, 'PARTNER_AD_SERVER_VIDEO')
+GROUP BY f.date_key, d.id, d.name
+ORDER BY f.date_key ASC, d.id ASC
+"""
+
+# --- Loss Reason Query Template ---
+QUERY_TEMPLATE_LOSS_REASON = """
+SELECT 
+    f.date_key,
+    d AS deal_id,
+    h.name AS deal_name,
+    f.filter_reason,
+    SUM(CASE WHEN ad_fetch_source IS null and is_impressed is NOT NULL Then 1 Else 0 END) AS imps,
+    SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END) AS real_demand_returned,
+    SUM(f.num_opportunities) AS oppos,
+    SUM(f.is_selected) AS total_bids,
+    SUM(CASE WHEN f.is_impressed IS NULL AND f.event_type = 'candidate' AND f.ad_fetch_source IS NULL THEN 1 ELSE 0 END) AS Loss_Totals,
+    (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.num_opportunities), 0)) * 100.00 AS fill_rate,
+    SUM(CASE WHEN f.event_type = 'demand_request' THEN 1 ELSE 0 END) AS Requests,
+    (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.is_selected), 0)) * 100.00 AS render_rate,
+    (SUM(CASE WHEN f.is_selected IS NOT NULL AND f.ad_fetch_source IS NULL THEN 1 ELSE 0 END) * 1.0
+      / NULLIF(SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END), 0)) * 100.0 AS win_rate,    
+      SUM(CASE WHEN f.event_type = 'candidate' THEN 1 ELSE 0 END) AS candidates
 FROM
     advertising.demand_funnel f
 CROSS JOIN UNNEST(f.deal_id) AS t(d)
@@ -47,15 +94,17 @@ LEFT JOIN ads.dim_rams_deals_history h
     ON d = h.id
     AND f.date_key = h.date_key
 WHERE 
-    f.date_key >= '{date_from}'
-    {date_to_condition}
+    f.date_key BETWEEN '{date_from}' AND '{date_to}'
     AND CONTAINS(f.demand_systems, 'PARTNER_AD_SERVER_VIDEO')
     {deal_name_condition}
+    AND f.filter_reason IS NOT NULL
 GROUP BY 
-    f.date_key, d, h.name
+    f.date_key, d, h.name, f.filter_reason
 ORDER BY 
     f.date_key ASC, d ASC
 """
+
+
 
 # --- In-Memory Job Tracking ---
 JOBS = {}
@@ -89,6 +138,10 @@ def init_db():
         requests REAL,
         original_data JSON,
         created_at TIMESTAMP,
+        real_demand_returned REAL,
+        Loss_Totals REAL,
+        win_rate REAL,
+        candidates REAL,
         PRIMARY KEY (deal_name, date_key)
     )
     """)
@@ -102,6 +155,78 @@ def init_db():
     conn.close()
 
 init_db()
+
+import sqlite3
+LOSS_REASON_DB_PATH = "loss_reason_cache.db"
+
+# --- Loss Reason Cache ---
+def init_loss_reason_db():
+    conn = sqlite3.connect(LOSS_REASON_DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS loss_reason_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date_key TEXT,
+            deal_id TEXT,
+            deal_name TEXT,
+            filter_reason TEXT,
+            imps REAL,
+            real_demand_returned REAL,
+            oppos REAL,
+            total_bids REAL,
+            Loss_Totals REAL,
+            fill_rate REAL,
+            Requests REAL,
+            render_rate REAL,
+            win_rate REAL,
+            candidates REAL,
+            original_data TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_loss_reason_db()
+
+def save_loss_reason_results_to_db(deal_name, date_from, date_to, rows):
+    conn = sqlite3.connect(LOSS_REASON_DB_PATH)
+    c = conn.cursor()
+    inserted_count = 0
+    duplicate_count = 0
+    for row in rows:
+        # Use a unique constraint on (date_key, deal_id, deal_name, filter_reason) if needed
+        c.execute('''
+            SELECT COUNT(*) FROM loss_reason_results WHERE date_key=? AND deal_id=? AND deal_name=? AND filter_reason=?
+        ''', (row.get('date_key'), row.get('deal_id'), row.get('deal_name'), row.get('filter_reason')))
+        if c.fetchone()[0] == 0:
+            c.execute('''
+                INSERT INTO loss_reason_results (
+                    date_key, deal_id, deal_name, filter_reason, imps, real_demand_returned, oppos, total_bids, Loss_Totals, fill_rate, Requests, render_rate, win_rate, candidates, original_data
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                row.get('date_key'),
+                row.get('deal_id'),
+                row.get('deal_name'),
+                row.get('filter_reason'),
+                row.get('imps'),
+                row.get('real_demand_returned'),
+                row.get('oppos'),
+                row.get('total_bids'),
+                row.get('Loss_Totals'),
+                row.get('fill_rate'),
+                row.get('Requests'),
+                row.get('render_rate'),
+                row.get('win_rate'),
+                row.get('candidates'),
+                json.dumps(row)
+            ))
+            inserted_count += 1
+        else:
+            duplicate_count += 1
+    conn.commit()
+    conn.close()
+    print(f"[LOSS_REASON_CACHE] Inserted {inserted_count} new rows, skipped {duplicate_count} duplicates")
+    return inserted_count
 
 # --- Automated Data Pulling ---
 def get_all_cached_deals():
@@ -161,12 +286,12 @@ def pull_previous_day_data():
         print(f"[SCHEDULER] Processing batch {batch_num}/{len(deal_batches)}: {len(deal_batch)} deals")
         
         # Build SQL query for this batch
-        like_conditions = [f"h.name LIKE '%{deal}%'" for deal in deal_batch]
+        like_conditions = [f"name LIKE '%{deal}%'" for deal in deal_batch]
         deal_name_condition = f"AND ({' OR '.join(like_conditions)})"
         
         sql_query = QUERY_TEMPLATE.format(
             date_from=yesterday,
-            date_to_condition="",  # Single day only
+            date_to=yesterday,  # Single day only
             deal_name_condition=deal_name_condition
         )
         
@@ -182,7 +307,7 @@ def pull_previous_day_data():
                 SUPERSET_EXECUTE_URL,
                 headers=SUPERSET_HEADERS,
                 data=json.dumps(payload),
-                timeout=300  # 5 minutes per batch
+                timeout=1800  # 15 minutes per batch
             )
             
             if resp.status_code == 200:
@@ -247,8 +372,9 @@ def save_results_to_db(job_id, deal_names, date_from, date_to, rows):
                 c.execute("""
                     INSERT INTO query_results(
                         date_key, deal_id, deal_name, imps, oppos, total_bids, 
-                        fill_rate, render_rate, requests, original_data, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        fill_rate, render_rate, requests, original_data, created_at,
+                        real_demand_returned, Loss_Totals, win_rate, candidates
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     date_key,
                     deal_id,
@@ -260,7 +386,11 @@ def save_results_to_db(job_id, deal_names, date_from, date_to, rows):
                     float(row.get('render_rate', 0) or 0),
                     float(row.get('Requests', 0) or 0),
                     json.dumps(row),
-                    datetime.now()
+                    datetime.now(),
+                    float(row.get('real_demand_returned', 0) or 0),
+                    float(row.get('Loss_Totals', 0) or 0),
+                    float(row.get('win_rate', 0) or 0),
+                    float(row.get('candidates', 0) or 0)
                 ))
                 inserted_count += 1
             except sqlite3.IntegrityError:
@@ -329,7 +459,8 @@ def get_cached_results(deal_names, date_from, date_to):
             # Get the requested data from cache
             c.execute("""
                 SELECT date_key, deal_id, deal_name, imps, oppos, total_bids, 
-                       fill_rate, render_rate, requests, original_data
+                       fill_rate, render_rate, requests, real_demand_returned, 
+                       Loss_Totals, win_rate, candidates
                 FROM query_results 
                 WHERE deal_name LIKE ? AND date_key >= ? AND date_key <= ?
                 ORDER BY date_key ASC
@@ -337,43 +468,22 @@ def get_cached_results(deal_names, date_from, date_to):
             
             rows = c.fetchall()
             
-            # Convert to the expected format using original_data
+            # Convert to the expected format using direct columns
             for row in rows:
-                # Parse the original JSON data to get all fields
-                try:
-                    original_data = json.loads(row[9]) if row[9] else {}
-                except:
-                    original_data = {}
-                
-                # Use original data for deal_name if it's more complete than cached column
-                cached_deal_name = str(row[2])
-                original_deal_name = str(original_data.get('deal_name', ''))
-                
-                print(f"[DEBUG] Processing row: cached='{cached_deal_name}', original='{original_deal_name}'")
-                
-                # Choose the better deal name - prefer original_data if it's longer and more descriptive
-                if original_deal_name and len(original_deal_name) > len(cached_deal_name):
-                    deal_name = original_deal_name
-                    print(f"[DEBUG] Using original: '{deal_name}'")
-                else:
-                    deal_name = cached_deal_name
-                    print(f"[DEBUG] Using cached: '{deal_name}'")
-                
-                # Use original data if available, otherwise fall back to cached columns
                 all_cached_rows.append({
                     'date_key': row[0],
                     'deal_id': row[1], 
-                    'deal_name': deal_name,
-                    'imps': float(original_data.get('imps', row[3]) or 0),
-                    'oppos': float(original_data.get('oppos', row[4]) or 0),
-                    'total_bids': float(original_data.get('total_bids', row[5]) or 0),
-                    'fill_rate': float(original_data.get('fill_rate', row[6]) or 0),
-                    'render_rate': float(original_data.get('render_rate', row[7]) or 0),
-                    'Requests': float(original_data.get('Requests', row[8]) or 0),
-                    'real_demand_returned': float(original_data.get('real_demand_returned', 0) or 0),
-                    'Loss_Totals': float(original_data.get('Loss_Totals', 0) or 0),
-                    'win_rate': float(original_data.get('win_rate', 0) or 0),
-                    'candidates': float(original_data.get('candidates', 0) or 0)
+                    'deal_name': row[2],
+                    'imps': float(row[3] or 0),
+                    'oppos': float(row[4] or 0),
+                    'total_bids': float(row[5] or 0),
+                    'fill_rate': float(row[6] or 0),
+                    'render_rate': float(row[7] or 0),
+                    'Requests': float(row[8] or 0),
+                    'real_demand_returned': float(row[9] or 0),
+                    'Loss_Totals': float(row[10] or 0),
+                    'win_rate': float(row[11] or 0),
+                    'candidates': float(row[12] or 0)
                 })
         elif cache_covers_request and unique_deals == 1 and is_broad_search:
             # Only one deal in cache for a broad search - likely incomplete, need to query for all matching deals
@@ -392,7 +502,8 @@ def get_cached_results(deal_names, date_from, date_to):
             # Get the requested data from cache
             c.execute("""
                 SELECT date_key, deal_id, deal_name, imps, oppos, total_bids, 
-                       fill_rate, render_rate, requests, original_data
+                       fill_rate, render_rate, requests, real_demand_returned, 
+                       Loss_Totals, win_rate, candidates
                 FROM query_results 
                 WHERE deal_name LIKE ? AND date_key >= ? AND date_key <= ?
                 ORDER BY date_key ASC
@@ -414,43 +525,22 @@ def get_cached_results(deal_names, date_from, date_to):
                     if coverage_percent >= 80:
                         print(f"[CACHE] Deal '{deal_name}': Using cache with {coverage_percent:.1f}% coverage ({available_days}/{total_days} days)")
                         
-                        # Convert to the expected format using original_data
+                        # Convert to the expected format using direct columns
                         for row in rows:
-                            # Parse the original JSON data to get all fields
-                            try:
-                                original_data = json.loads(row[9]) if row[9] else {}
-                            except:
-                                original_data = {}
-                            
-                            # Use original data for deal_name if it's more complete than cached column
-                            cached_deal_name = str(row[2])
-                            original_deal_name = str(original_data.get('deal_name', ''))
-                            
-                            print(f"[DEBUG] Processing row: cached='{cached_deal_name}', original='{original_deal_name}'")
-                            
-                            # Choose the better deal name - prefer original_data if it's longer and more descriptive
-                            if original_deal_name and len(original_deal_name) > len(cached_deal_name):
-                                deal_name = original_deal_name
-                                print(f"[DEBUG] Using original: '{deal_name}'")
-                            else:
-                                deal_name = cached_deal_name
-                                print(f"[DEBUG] Using cached: '{deal_name}'")
-                            
-                            # Use original data if available, otherwise fall back to cached columns
                             all_cached_rows.append({
                                 'date_key': row[0],
                                 'deal_id': row[1], 
-                                'deal_name': deal_name,
-                                'imps': float(original_data.get('imps', row[3]) or 0),
-                                'oppos': float(original_data.get('oppos', row[4]) or 0),
-                                'total_bids': float(original_data.get('total_bids', row[5]) or 0),
-                                'fill_rate': float(original_data.get('fill_rate', row[6]) or 0),
-                                'render_rate': float(original_data.get('render_rate', row[7]) or 0),
-                                'Requests': float(original_data.get('Requests', row[8]) or 0),
-                                'real_demand_returned': float(original_data.get('real_demand_returned', 0) or 0),
-                                'Loss_Totals': float(original_data.get('Loss_Totals', 0) or 0),
-                                'win_rate': float(original_data.get('win_rate', 0) or 0),
-                                'candidates': float(original_data.get('candidates', 0) or 0)
+                                'deal_name': row[2],
+                                'imps': float(row[3] or 0),
+                                'oppos': float(row[4] or 0),
+                                'total_bids': float(row[5] or 0),
+                                'fill_rate': float(row[6] or 0),
+                                'render_rate': float(row[7] or 0),
+                                'Requests': float(row[8] or 0),
+                                'real_demand_returned': float(row[9] or 0),
+                                'Loss_Totals': float(row[10] or 0),
+                                'win_rate': float(row[11] or 0),
+                                'candidates': float(row[12] or 0)
                             })
                     else:
                         print(f"[CACHE] Deal '{deal_name}': Insufficient coverage ({coverage_percent:.1f}%) - need fresh query")
@@ -482,7 +572,8 @@ def get_cached_results(deal_names, date_from, date_to):
                 
                 c.execute("""
                     SELECT date_key, deal_id, deal_name, imps, oppos, total_bids, 
-                           fill_rate, render_rate, requests, original_data
+                           fill_rate, render_rate, requests, real_demand_returned, 
+                           Loss_Totals, win_rate, candidates
                     FROM query_results 
                     WHERE deal_name LIKE ? AND date_key >= ? AND date_key <= ?
                     ORDER BY date_key ASC
@@ -499,39 +590,22 @@ def get_cached_results(deal_names, date_from, date_to):
                 if coverage_percent >= 50:
                     print(f"[CACHE] Deal '{deal_name}': Using incremental query approach")
                     
-                    # Add cached data to results using original_data
+                    # Add cached data to results using direct columns
                     for row in cached_rows:
-                        # Parse the original JSON data to get all fields
-                        try:
-                            original_data = json.loads(row[9]) if row[9] else {}
-                        except:
-                            original_data = {}
-                        
-                        # Use original data for deal_name if it's more complete than cached column
-                        cached_deal_name = str(row[2])
-                        original_deal_name = str(original_data.get('deal_name', ''))
-                        
-                        # Choose the better deal name - prefer original_data if it's longer and more descriptive
-                        if original_deal_name and len(original_deal_name) > len(cached_deal_name):
-                            deal_name = original_deal_name
-                        else:
-                            deal_name = cached_deal_name
-                        
-                        # Use original data if available, otherwise fall back to cached columns
                         all_cached_rows.append({
                             'date_key': row[0],
                             'deal_id': row[1], 
-                            'deal_name': deal_name,
-                            'imps': float(original_data.get('imps', row[3]) or 0),
-                            'oppos': float(original_data.get('oppos', row[4]) or 0),
-                            'total_bids': float(original_data.get('total_bids', row[5]) or 0),
-                            'fill_rate': float(original_data.get('fill_rate', row[6]) or 0),
-                            'render_rate': float(original_data.get('render_rate', row[7]) or 0),
-                            'Requests': float(original_data.get('Requests', row[8]) or 0),
-                            'real_demand_returned': float(original_data.get('real_demand_returned', 0) or 0),
-                            'Loss_Totals': float(original_data.get('Loss_Totals', 0) or 0),
-                            'win_rate': float(original_data.get('win_rate', 0) or 0),
-                            'candidates': float(original_data.get('candidates', 0) or 0)
+                            'deal_name': row[2],
+                            'imps': float(row[3] or 0),
+                            'oppos': float(row[4] or 0),
+                            'total_bids': float(row[5] or 0),
+                            'fill_rate': float(row[6] or 0),
+                            'render_rate': float(row[7] or 0),
+                            'Requests': float(row[8] or 0),
+                            'real_demand_returned': float(row[9] or 0),
+                            'Loss_Totals': float(row[10] or 0),
+                            'win_rate': float(row[11] or 0),
+                            'candidates': float(row[12] or 0)
                         })
                     
                     # Determine missing date ranges to query
@@ -592,18 +666,17 @@ def run_incremental_superset_query(job_id, missing_ranges, original_date_from, o
         print(f"[JOB {job_id}] Query {i+1}/{len(missing_ranges)}: {deal_name} from {date_from} to {date_to} ({reason})")
         
         # Build targeted SQL query for this missing range using original search terms
-        date_to_condition = f"AND f.date_key <= '{date_to}'" if date_to != date_from else ""
         
         # Use original search terms instead of specific deal name
         if len(original_search_terms) == 1:
-            deal_name_condition = f"AND h.name LIKE '%{original_search_terms[0]}%'"
+            deal_name_condition = f"AND name LIKE '%{original_search_terms[0]}%'"
         else:
-            like_conditions = [f"h.name LIKE '%{term}%'" for term in original_search_terms]
+            like_conditions = [f"name LIKE '%{term}%'" for term in original_search_terms]
             deal_name_condition = f"AND ({' OR '.join(like_conditions)})"
         
         sql_query = QUERY_TEMPLATE.format(
             date_from=date_from,
-            date_to_condition=date_to_condition,
+            date_to=date_to,
             deal_name_condition=deal_name_condition
         )
         
@@ -617,12 +690,17 @@ def run_incremental_superset_query(job_id, missing_ranges, original_date_from, o
         }
         
         try:
-            resp = requests.post(
+            print(f"[DEBUG] Making incremental request with session")
+            print(f"[DEBUG] Payload: {json.dumps(payload)[:200]}...")
+            resp = SUPERSET_SESSION.post(
                 SUPERSET_EXECUTE_URL,
-                headers=SUPERSET_HEADERS,
                 data=json.dumps(payload),
-                timeout=300  # 5 minutes per query
+                timeout=1800  # 15 minutes per query
             )
+            
+            # Add a small delay between requests to avoid rate limiting
+            if i < len(missing_ranges) - 1:  # Don't delay after the last request
+                time_module.sleep(2)
             
             if resp.status_code == 200:
                 resp_data = resp.json()
@@ -687,14 +765,16 @@ def run_superset_query(job_id, deal_names, date_from, date_to, sql_query):
     }
 
     try:
+        print(f"[DEBUG] Making main request with headers: {SUPERSET_HEADERS}")
+        print(f"[DEBUG] Payload: {json.dumps(payload)[:200]}...")
         resp = requests.post(
             SUPERSET_EXECUTE_URL,
             headers=SUPERSET_HEADERS,
             data=json.dumps(payload),
-            timeout=600  # 10 minutes
+            timeout=1800  # 20 minutes
         )
     except requests.exceptions.Timeout:
-        JOBS[job_id] = {"status": "error", "message": "Query timed out after 10 minutes"}
+        JOBS[job_id] = {"status": "error", "message": "Query timed out after 20 minutes"}
         return
 
     if resp.status_code != 200:
@@ -870,48 +950,72 @@ def check_for_missing_deals_data(deal_names, date_from, date_to):
 
 def build_targeted_sql_query(missing_deals_data, date_from, date_to):
     """Build SQL query targeting only missing deal+date combinations"""
-    missing_date_conditions = []
-    
+    # Extract unique deal names and missing dates
+    deal_names = list(set(item['deal_name'] for item in missing_deals_data))
+    missing_dates = set()
     for item in missing_deals_data:
-        for date in item['missing_dates']:
-            missing_date_conditions.append(f"(h.name = '{item['deal_name']}' AND f.date_key = '{date}')")
+        missing_dates.update(item['missing_dates'])
     
-    if missing_date_conditions:
-        date_condition = " OR ".join(missing_date_conditions)
-        
-        sql_query = f"""
-        SELECT 
-            f.date_key,
-            d AS deal_id,
-            h.name AS deal_name,
-            SUM(f.is_impressed) AS imps,
-            SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END) AS real_demand_returned,
-            SUM(f.num_opportunities) AS oppos,
-            SUM(f.is_selected) AS total_bids,
-            SUM(CASE WHEN f.is_impressed IS NULL AND f.event_type = 'candidate' AND f.ad_fetch_source IS NULL THEN 1 ELSE 0 END) AS Loss_Totals,
-            (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.num_opportunities), 0)) * 100.00 AS fill_rate,
-            SUM(CASE WHEN f.event_type = 'demand_request' THEN 1 ELSE 0 END) AS Requests,
-            (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.is_selected), 0)) * 100.00 AS render_rate,
-            (SUM(f.is_selected) * 1.000 / NULLIF(SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END), 0)) * 100.00 AS win_rate,
-            SUM(CASE WHEN f.event_type = 'candidate' THEN 1 ELSE 0 END) AS candidates
-        FROM advertising.demand_funnel f
-        CROSS JOIN UNNEST(f.deal_id) AS t(d)
-        LEFT JOIN ads.dim_rams_deals_history h ON d = h.id AND f.date_key = h.date_key
-        WHERE f.date_key >= '{date_from}' AND f.date_key <= '{date_to}'
-        AND CONTAINS(f.demand_systems, 'PARTNER_AD_SERVER_VIDEO')
-        AND ({date_condition})
-        GROUP BY f.date_key, d, h.name
-        ORDER BY f.date_key ASC, d ASC
-        """
-        
-        return sql_query
+    if not missing_dates:
+        return None
     
-    return None
+    # Build deal name condition
+    if len(deal_names) == 1:
+        deal_name_condition = f"AND name LIKE '%{deal_names[0]}%'"
+    else:
+        like_conditions = [f"name LIKE '%{name}%'" for name in deal_names]
+        deal_name_condition = f"AND ({' OR '.join(like_conditions)})"
+    
+    # Build date condition for missing dates only
+    date_conditions = [f"f.date_key = '{date}'" for date in sorted(missing_dates)]
+    date_condition = " OR ".join(date_conditions)
+    
+    sql_query = f"""
+    WITH filtered_deals AS (
+        SELECT DISTINCT id, name
+        FROM ads.dim_rams_deals_history
+        WHERE date_key BETWEEN '{date_from}' AND '{date_to}' 
+          {deal_name_condition}
+    )
+    SELECT 
+        f.date_key,
+        d.id AS deal_id,
+        d.name AS deal_name,
+        SUM(f.is_impressed) AS imps,
+        SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END) AS real_demand_returned,
+        SUM(CASE WHEN f.ad_fetch_source IS NOT NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END) AS Bid_Cache_demand,
+        SUM(f.num_opportunities) AS oppos,
+        SUM(f.is_selected) AS total_bids,
+        SUM(CASE WHEN f.is_impressed IS NULL AND f.event_type = 'candidate' AND f.ad_fetch_source IS NULL THEN 1 ELSE 0 END) AS Loss_Totals,
+        (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.num_opportunities), 0)) * 100.00 AS fill_rate,
+        SUM(CASE WHEN f.event_type = 'demand_request' THEN 1 ELSE 0 END) AS Requests,
+        (SUM(f.is_impressed) * 1.000 / NULLIF(SUM(f.is_selected), 0)) * 100.00 AS render_rate,
+        (SUM(f.is_selected) * 1.000 / NULLIF(SUM(CASE WHEN f.ad_fetch_source IS NULL AND f.event_type = 'candidate' THEN 1 ELSE 0 END), 0)) * 100.00 AS win_rate,
+        SUM(CASE WHEN f.event_type = 'candidate' THEN 1 ELSE 0 END) AS candidates
+    FROM advertising.demand_funnel f
+    JOIN filtered_deals d
+      ON CONTAINS(f.deal_id, d.id)   -- pruning without full UNNEST
+    WHERE f.date_key BETWEEN '{date_from}' AND '{date_to}'
+      AND CONTAINS(f.demand_systems, 'PARTNER_AD_SERVER_VIDEO')
+      AND ({date_condition})
+    GROUP BY f.date_key, d.id, d.name
+    ORDER BY f.date_key ASC, d.id ASC
+    """
+    
+    return sql_query
 
 # --- Flask Routes ---
 @app.route("/", methods=["GET"])
 def index():
     return render_template("index.html")
+
+@app.route("/loss-reason-query", methods=["GET"])
+def loss_reason_query_page():
+    return render_template("loss_reason_query.html")
+
+@app.route("/filter-reason-overview", methods=["GET"])
+def filter_reason_overview_page():
+    return render_template("filter_reason_overview.html")
 
 @app.route("/dod-graphs", methods=["GET"])
 def dod_graphs():
@@ -985,38 +1089,56 @@ def run_query():
         
         if missing_deals_data:
             print(f"[CACHE COMPLETION] Found {len(missing_deals_data)} deals with missing data, will query for specific missing dates")
-            # Use targeted query for missing dates only
-            sql_query = build_targeted_sql_query(missing_deals_data, date_from, date_to)
-            if sql_query:
-                print(f"[CACHE COMPLETION] Using targeted query for missing dates only")
-            else:
-                # Fallback to full range query
-                date_to_condition = f"AND f.date_key <= '{date_to}'" if date_to and date_to != date_from else ""
+            
+            # Count total missing dates to decide approach
+            total_missing_dates = sum(len(item['missing_dates']) for item in missing_deals_data)
+            print(f"[CACHE COMPLETION] Total missing dates: {total_missing_dates}")
+            
+            # If too many missing dates (>5), use full range query instead of targeted query
+            if total_missing_dates > 5:
+                print(f"[CACHE COMPLETION] Too many missing dates ({total_missing_dates}), using full range query")
                 if len(deal_names) == 1:
-                    deal_name_condition = f"AND h.name LIKE '%{deal_names[0]}%'"
+                    deal_name_condition = f"AND name LIKE '%{deal_names[0]}%'"
                 else:
-                    like_conditions = [f"h.name LIKE '%{name}%'" for name in deal_names]
+                    like_conditions = [f"name LIKE '%{name}%'" for name in deal_names]
                     deal_name_condition = f"AND ({' OR '.join(like_conditions)})"
                 
                 sql_query = QUERY_TEMPLATE.format(
                     date_from=date_from,
-                    date_to_condition=date_to_condition,
+                    date_to=date_to,
                     deal_name_condition=deal_name_condition
                 )
+            else:
+                # Use targeted query for missing dates only
+                sql_query = build_targeted_sql_query(missing_deals_data, date_from, date_to)
+                if sql_query:
+                    print(f"[CACHE COMPLETION] Using targeted query for missing dates only")
+                else:
+                    # Fallback to full range query
+                    if len(deal_names) == 1:
+                        deal_name_condition = f"AND name LIKE '%{deal_names[0]}%'"
+                    else:
+                        like_conditions = [f"name LIKE '%{name}%'" for name in deal_names]
+                        deal_name_condition = f"AND ({' OR '.join(like_conditions)})"
+                    
+                    sql_query = QUERY_TEMPLATE.format(
+                        date_from=date_from,
+                        date_to=date_to,
+                        deal_name_condition=deal_name_condition
+                    )
         else:
             # Build SQL query for full range
-            date_to_condition = f"AND f.date_key <= '{date_to}'" if date_to and date_to != date_from else ""
             
             # Build deal name condition for multiple names
             if len(deal_names) == 1:
-                deal_name_condition = f"AND h.name LIKE '%{deal_names[0]}%'"
+                deal_name_condition = f"AND name LIKE '%{deal_names[0]}%'"
             else:
-                like_conditions = [f"h.name LIKE '%{name}%'" for name in deal_names]
+                like_conditions = [f"name LIKE '%{name}%'" for name in deal_names]
                 deal_name_condition = f"AND ({' OR '.join(like_conditions)})"
             
             sql_query = QUERY_TEMPLATE.format(
                 date_from=date_from,
-                date_to_condition=date_to_condition,
+                date_to=date_to,
                 deal_name_condition=deal_name_condition
             )
 
@@ -1194,7 +1316,7 @@ def get_dod_data():
                 SUPERSET_EXECUTE_URL,
                 headers=SUPERSET_HEADERS,
                 data=json.dumps(payload),
-                timeout=300
+                timeout=1800
             )
             
             if resp.status_code == 200:
@@ -1302,6 +1424,65 @@ def get_cached_results_for_single_deal(deal_name, date_from, date_to):
         print(f"Error getting cached results for single deal: {e}")
         return None
 
+app.add_url_rule(
+    "/get_yesterday_data",
+    view_func=pull_previous_day_data,
+    methods=["POST", "GET"]
+)
+
+# --- API route to fetch all loss reason results as JSON ---
+@app.route("/api/loss-reason-results", methods=["GET"])
+def get_loss_reason_results():
+    """API endpoint to fetch all loss reason results as JSON for frontend rendering."""
+    conn = sqlite3.connect(LOSS_REASON_DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        SELECT date_key, deal_id, deal_name, filter_reason, imps, real_demand_returned, oppos, total_bids, Loss_Totals, fill_rate, Requests, render_rate, win_rate, candidates
+        FROM loss_reason_results
+        ORDER BY date_key DESC, deal_name ASC, filter_reason ASC
+    """)
+    rows = c.fetchall()
+    columns = ["date_key", "deal_id", "deal_name", "filter_reason", "imps", "real_demand_returned", "oppos", "total_bids", "Loss_Totals", "fill_rate", "Requests", "render_rate", "win_rate", "candidates"]
+    results = [dict(zip(columns, row)) for row in rows]
+    conn.close()
+    return jsonify({"columns": columns, "rows": results})
+
+@app.route("/api/all-filter-reason-data", methods=["GET"])
+def get_all_filter_reason_data():
+    """API endpoint to fetch all cached filter reason data with optional date filtering."""
+    date_from = request.args.get("date_from", "")
+    date_to = request.args.get("date_to", "")
+    
+    conn = sqlite3.connect(LOSS_REASON_DB_PATH)
+    c = conn.cursor()
+    
+    if date_from and date_to:
+        # Filter by date range
+        c.execute("""
+            SELECT date_key, deal_id, deal_name, filter_reason, imps, real_demand_returned, oppos, total_bids, Loss_Totals, fill_rate, Requests, render_rate, win_rate, candidates
+            FROM loss_reason_results
+            WHERE date_key >= ? AND date_key <= ?
+            ORDER BY date_key DESC, deal_name ASC, filter_reason ASC
+        """, (date_from, date_to))
+    else:
+        # Get all data
+        c.execute("""
+            SELECT date_key, deal_id, deal_name, filter_reason, imps, real_demand_returned, oppos, total_bids, Loss_Totals, fill_rate, Requests, render_rate, win_rate, candidates
+            FROM loss_reason_results
+            ORDER BY date_key DESC, deal_name ASC, filter_reason ASC
+        """)
+    
+    rows = c.fetchall()
+    columns = ["date_key", "deal_id", "deal_name", "filter_reason", "imps", "real_demand_returned", "oppos", "total_bids", "Loss_Totals", "fill_rate", "Requests", "render_rate", "win_rate", "candidates"]
+    results = [dict(zip(columns, row)) for row in rows]
+    conn.close()
+    
+    return jsonify({
+        "status": "success",
+        "columns": columns, 
+        "rows": results,
+        "total_rows": len(results)
+    })
 @app.route("/get_available_deals", methods=["GET"])
 def get_available_deals():
     """Get list of unique deal names from cached data"""
@@ -1812,6 +1993,208 @@ def check_status(job_id):
     if not job:
         return jsonify({"status": "error", "message": "Invalid job_id"}), 404
     return jsonify(job)
+
+@app.route("/loss-reason-query", methods=["POST"])
+def loss_reason_query_api():
+    try:
+        deal_name = request.form.get("deal_name", "").strip()
+        date_from = request.form.get("date_from", "").strip()
+        date_to = request.form.get("date_to", "").strip()
+        print(f"Received: deal_name={deal_name}, date_from={date_from}, date_to={date_to}")
+
+        # Check cache coverage first
+        conn = sqlite3.connect(LOSS_REASON_DB_PATH)
+        c = conn.cursor()
+        
+        # Check what date range we have cached
+        c.execute("""
+            SELECT MIN(date_key) as cached_min, MAX(date_key) as cached_max, COUNT(*) as cached_count
+            FROM loss_reason_results 
+            WHERE deal_name LIKE ?
+        """, (f'%{deal_name}%',))
+        
+        cache_info = c.fetchone()
+        cached_min, cached_max, cached_count = cache_info if cache_info else (None, None, 0)
+        
+        if cached_count == 0:
+            # No cached data - query full range
+            print(f"[LOSS_REASON_CACHE] No cached data found for '{deal_name}'")
+            conn.close()
+            return query_loss_reason_superset(deal_name, date_from, date_to)
+        
+        print(f"[LOSS_REASON_CACHE] Cache coverage: {cached_min} to {cached_max} ({cached_count} rows)")
+        
+        # Check if cache covers the full requested range
+        cache_covers_request = (cached_min <= date_from and cached_max >= date_to)
+        
+        if cache_covers_request:
+            # Full cache coverage - return cached data
+            print(f"[LOSS_REASON_CACHE] Full cache coverage available")
+            c.execute("""
+                SELECT date_key, deal_id, deal_name, filter_reason, imps, real_demand_returned, 
+                       oppos, total_bids, fill_rate, Requests, render_rate, win_rate, candidates
+                FROM loss_reason_results 
+                WHERE deal_name LIKE ? AND date_key >= ? AND date_key <= ?
+                ORDER BY date_key ASC
+            """, (f'%{deal_name}%', date_from, date_to))
+            
+            cached_rows = c.fetchall()
+            conn.close()
+            
+            # Convert cached rows to dict format
+            rows = []
+            for row in cached_rows:
+                rows.append({
+                    'date_key': row[0],
+                    'deal_id': row[1],
+                    'deal_name': row[2],
+                    'filter_reason': row[3],
+                    'imps': float(row[4] or 0),
+                    'real_demand_returned': float(row[5] or 0),
+                    'oppos': float(row[6] or 0),
+                    'total_bids': float(row[7] or 0),
+                    'fill_rate': float(row[8] or 0),
+                    'Requests': float(row[9] or 0),
+                    'render_rate': float(row[10] or 0),
+                    'win_rate': float(row[11] or 0),
+                    'candidates': float(row[12] or 0)
+                })
+            
+            return jsonify({
+                "status": "success",
+                "rows": rows,
+                "columns": list(rows[0].keys()) if rows else [],
+                "cached": True
+            })
+        
+        else:
+            # Partial cache coverage - use incremental approach
+            print(f"[LOSS_REASON_CACHE] Partial cache coverage - using incremental query")
+            
+            # Get overlapping cached data
+            overlap_start = max(date_from, cached_min)
+            overlap_end = min(date_to, cached_max)
+            
+            c.execute("""
+                SELECT date_key, deal_id, deal_name, filter_reason, imps, real_demand_returned, 
+                       oppos, total_bids, fill_rate, Requests, render_rate, win_rate, candidates
+                FROM loss_reason_results 
+                WHERE deal_name LIKE ? AND date_key >= ? AND date_key <= ?
+                ORDER BY date_key ASC
+            """, (f'%{deal_name}%', overlap_start, overlap_end))
+            
+            cached_rows = c.fetchall()
+            conn.close()
+            
+            # Convert cached rows to dict format
+            cached_data = []
+            for row in cached_rows:
+                cached_data.append({
+                    'date_key': row[0],
+                    'deal_id': row[1],
+                    'deal_name': row[2],
+                    'filter_reason': row[3],
+                    'imps': float(row[4] or 0),
+                    'real_demand_returned': float(row[5] or 0),
+                    'oppos': float(row[6] or 0),
+                    'total_bids': float(row[7] or 0),
+                    'fill_rate': float(row[8] or 0),
+                    'Requests': float(row[9] or 0),
+                    'render_rate': float(row[10] or 0),
+                    'win_rate': float(row[11] or 0),
+                    'candidates': float(row[12] or 0)
+                })
+            
+            # Determine missing date ranges to query
+            missing_ranges = []
+            
+            if date_from < cached_min:
+                # Need data before cached range
+                end_before = (datetime.strptime(cached_min, '%Y-%m-%d') - timedelta(days=1)).strftime('%Y-%m-%d')
+                missing_ranges.append({
+                    'date_from': date_from,
+                    'date_to': end_before,
+                    'reason': 'before_cache'
+                })
+            
+            if date_to > cached_max:
+                # Need data after cached range
+                start_after = (datetime.strptime(cached_max, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                missing_ranges.append({
+                    'date_from': start_after,
+                    'date_to': date_to,
+                    'reason': 'after_cache'
+                })
+            
+            print(f"[LOSS_REASON_CACHE] Missing ranges: {missing_ranges}")
+            
+            # Query missing ranges and combine with cached data
+            all_rows = cached_data.copy()
+            
+            for missing_range in missing_ranges:
+                print(f"[LOSS_REASON_CACHE] Querying missing range: {missing_range['date_from']} to {missing_range['date_to']}")
+                new_rows = query_loss_reason_superset(deal_name, missing_range['date_from'], missing_range['date_to'])
+                
+                if new_rows and isinstance(new_rows, list):
+                    all_rows.extend(new_rows)
+            
+            # Sort by date for consistent ordering
+            all_rows.sort(key=lambda x: (x.get('date_key', ''), x.get('deal_name', '')))
+            
+            return jsonify({
+                "status": "success",
+                "rows": all_rows,
+                "columns": list(all_rows[0].keys()) if all_rows else [],
+                "cached": False,
+                "incremental": True
+            })
+
+    except Exception as e:
+        print("Error in /loss_reason_query:", e)
+        return jsonify({"status": "error", "message": str(e)})
+
+def query_loss_reason_superset(deal_name, date_from, date_to):
+    """Helper function to query Superset for loss reason data"""
+    try:
+        like_condition = f"AND h.name LIKE '%{deal_name}%'" if deal_name else ""
+
+        sql_query = QUERY_TEMPLATE_LOSS_REASON.format(
+            date_from=date_from,
+            date_to=date_to,
+            deal_name_condition=like_condition
+        )
+
+        print(f"[DEBUG] Loss reason query: {sql_query}")
+
+        payload = {
+            "database_id": SUPERSET_DB_ID,
+            "schema": "advertising",
+            "sql": sql_query,
+            "runAsync": False
+        }
+
+        resp = requests.post(
+            SUPERSET_EXECUTE_URL,
+            headers=SUPERSET_HEADERS,
+            data=json.dumps(payload),
+            timeout=1800
+        )
+
+        if resp.status_code == 200:
+            resp_data = resp.json()
+            rows = resp_data.get("data", [])
+
+            # Save to loss reason cache
+            save_loss_reason_results_to_db(deal_name, date_from, date_to, rows)
+
+            return rows
+        else:
+            print(f"[LOSS_REASON_CACHE] Superset query failed: {resp.text}")
+            return []
+
+    except Exception as e:
+        print(f"[LOSS_REASON_CACHE] Superset query exception: {e}")
+        return []
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5003, debug=True)

@@ -91,7 +91,8 @@
             white-space: nowrap;
             background: white;
         }
-        .provider-table th {
+        /* Sticky header row (main header) */
+        .provider-table thead tr:first-child th {
             background: #f4f6fb;
             font-size: 1.15em;
             font-weight: 700;
@@ -99,15 +100,20 @@
             letter-spacing: 0.02em;
             position: sticky;
             top: 0;
-            z-index: 20;
+            z-index: 30;
+            height: 40px;
         }
-        /* Make date header cells sticky below the main header */
-        .provider-table th.date-header {
+        /* Sticky date header row (second header row) */
+        .provider-table thead tr:nth-child(2) th.date-header {
             position: sticky;
-            top: 48px; /* Height of the main header row */
+            top: 40px; /* Height of the main header row */
             background: #f4f6fb;
-            z-index: 19;
+            z-index: 25;
         }
+        /* Ensure all header cells have a defined height for stacking */
+        .provider-table th, .provider-table thead tr th {
+            min-height: 40px;
+            height: 40px;
         }
         .provider-table .provider-name, .provider-table th.provider-name {
             position: sticky;

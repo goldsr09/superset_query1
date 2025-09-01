@@ -211,6 +211,7 @@
             <a href="/dod-graphs">DoD Graphs</a>
             <a href="/breakout-analysis">Breakout Analysis</a>
             <a href="/aggregate-view">Aggregate View</a>
+            <a href="/loss-reason-query" style="background: #6f42c1;">Loss Reason Query</a>
         </div>
         <div class="card-section">
             <form id="queryForm">
@@ -396,14 +397,14 @@
             'imps': 'Impressions',
             'oppos': 'Num_Opportunities',
             'totalbids': 'is_selected',
-            'fillrate': '(is_selected / num_opportunites) * 100',
+            'fillrate': '(impressions / num_opportunites) * 100',
             'renderrate': '(impression / selected) * 100',
             'winrate': '(is_selected) /real_demand_returned) * 100',
             'requests': 'Total Demand Requests',
             'realdemandreturned': 'Candidates(No bid_cache)',
             'losstotals': 'Real_demand-Impression',
             'candidates': 'Bids:Real + Bid_Cache)'
-        };
+        };  
 
         function normalizeColName(col) {
             return col.toLowerCase().replace(/[^a-z0-9]/g, '');
