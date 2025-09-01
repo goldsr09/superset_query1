@@ -11,9 +11,9 @@ packages = ['flask', 'requests', 'schedule', 'json', 'uuid', 'threading', 'sqlit
 for package in packages:
     try:
         importlib.import_module(package)
-        print(f"✅ {package}: OK")
+        print(f"{package}: OK")
     except ImportError as e:
-        print(f"❌ {package}: {e}")
+        print(f"{package}: {e}")
 
 print("\nSite packages path:")
 for path in sys.path:
