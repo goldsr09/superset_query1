@@ -22,10 +22,10 @@ SUPERSET_EXECUTE_URL = "https://superset.de.gcp.rokulabs.net/api/v1/sqllab/execu
 SUPERSET_HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/json",
-    "Referer": "https://superset.de.gcp.rokulabs.net/sqllab/",
-    "Origin": "https://superset.de.gcp.rokulabs.net",
-    "X-CSRFToken": "IjI0MmQ0NTBmYmI4M2E4MmJjNGVlNmY3ZTVlNDMxOWExMzFiMDI1NWMi.aKzcnA.0aFaT4OmDGEJWYRY5uliRRdiX_Y",
-    "Cookie": "session=.eJyNjkFLAzEUhP9KyXkPyXtJ9m1vUi2KqJeKoMjykrx01y4tbuqhlv53A568eRpmmG-Ys-rzxGWQopZvZ7U4VlGJ91uZVaOuYpRSFmNZXMt-lKTeL81_Su9NnZ2lDGqZeSpS7ZjUUkUhDYGdNb6z4DSSsAdOmFAykHhEcroTAOTYMvrQhjZrShjAevBCNmayRixJIpMsg48GgVg4Wu0DdjGRNjmQ1mKsz5jAtRWgNmjR9W3_VWT-fWNsCzWJZc798bCTfc3AQrJO5xAImSBEK-JzK04smo4NmqDBuVi56RB5kspUsFGHMcX-z9QHr3en1c1qOH3fDi_m2aynx83n5v71bv0wP2236vIDGjNx1w.aKzc8Q.pFVCR9H8ZCCfjj3IzqU-Lv-neRc"
+    "Referer": "Placeholder"
+    "Origin": "Placeholder
+    "X-CSRFToken": Placeholder
+    "Cookie": "Placeholder
 }
 SUPERSET_DB_ID = 2
 
